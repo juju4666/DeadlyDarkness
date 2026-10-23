@@ -1,0 +1,14 @@
+# BGMUSIC: song numbers for the Begotten music line actions in Hexen-format maps.
+#   One "<number> <LUMPNAME>" per line. Later lines (and later wads) win.
+#   Line special 212 "Music Change"  arg1 = song number, arg2 = 1 only the activator hears it, arg3 = 1 play once (0 loops)
+#   Line special 213 "Music Stop"    arg1 = 1 only the activator hears it
+#   Use them with a "Player crosses" (W1/WR) activation. The new song always starts from its beginning, and
+#   crossing the line again while that song is already playing does nothing, so repeated crossings are harmless.
+#   (UDMF maps can use Music_ChangeSong / Music_Stop directly with the lump name.)
+#
+#   fade <tics>   how long the old song fades out before a change or stop (default 35 = 1 s, 0 = cut at once)
+#
+# Example:
+#   fade 35
+#   1 D_BOSS1
+#   2 D_BOSS2

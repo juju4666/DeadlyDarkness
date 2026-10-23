@@ -1,0 +1,18 @@
+# BGMOBJ - tuning for Begotten's monster roster and for Doom's hitscan monsters.
+#
+#   <name|doomednum>  <field> <value>  [<field> <value> ...]       (later lines win)
+#
+# Names: rockettrooper shocktrooper werewolf fireelemental madwizard apprentice minister golem
+#        mindeater aegis bore conjurer hatred mecha beetle heart core
+#        projectiles: rocket_trooper_rocket ... (see BEGOTTEN_ENGINE.md for the full list)
+# The roster took over Doom's monster slots, so 3002 is the werewolf, 3001 the fire elemental and so on
+# (see BEGOTTEN_ENGINE.md for the table); only 21001 (rocket trooper) and 21016 (heart) are new numbers.
+# Stock monsters (3004 9 84 65 ...) accept: health speed radius height mass pain reaction
+#        foedamage <percent>  foespread <percent>   (hitscan damage and spread of Doom's gunners)
+#        windup <tics>   (stock gunners and every roster monster: tics of the aim-up frame before the attack; 65 defaults to 24)
+# Every roster monster also has its own fields (leapmin, leapmax, cooldown, volley, cap, chance,
+# explode, blast, charge ...); see BEGOTTEN_ENGINE.md for the full list with defaults.
+#
+# Example:
+#   werewolf health 160 speed 12 leapmax 640
+#   3004 health 30 foedamage 130

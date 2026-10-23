@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Begotten
+Comment=Begotten
+Icon=begotten
+TryExec=begotten
+Exec=begotten %F
+Categories=Game;ActionGame;
+StartupWMClass=begotten

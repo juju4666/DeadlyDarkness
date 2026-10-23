@@ -1,0 +1,75 @@
+# DMGKINDS - damage kinds and monster vulnerabilities for Begotten.
+#
+# Every weapon attack deals a damage KIND, and every kind belongs to a CATEGORY:
+#
+#   kinds:       blade  bullet shell belt   fire tempest spirit   hellfire
+#   categories:  melee  [------ firearm ---] [------ magic -----]  special
+#
+# Lines (anything after # or // is a comment, "=" and "," are ignored):
+#
+#   weapon <name|number> <kind>
+#       the kind dealt by the weapon in the player's hands (hitscan and melee).
+#       names: fist pistol shotgun chaingun missile plasma bfg chainsaw supershotgun
+#              dualpistols chainfire tornado arclightning snap hellfire spare
+#       (modes: knife=fist, pistol=pistol, revolver=dualpistols, rifle=shotgun, machinegun=chaingun,
+#        fireball=missile, devil's breath=plasma, thunderclap=bfg, scattergun=supershotgun,
+#        chaingun=chainfire)
+#
+#   projectile thing <N> <kind>      (or: projectile ednum <N> <kind>)
+#   projectile name <tornado|arcbolt|hellfire> <kind>    (Begotten's own projectiles)
+#       the kind dealt by a projectile, and by its explosion. N is the DEHACKED
+#       thing number (1 = player, 34 = rocket, 35 = plasma, 36 = BFG ball).
+#
+#   vulnerability thing <N> <kind-or-category> <percent> [<...> <percent>]...
+#   vulnerability ednum <N> ...      (ednum = the number used in the map editor)
+#       how much damage this monster takes, in percent (100 = normal, 0 = immune).
+#       A kind overrides its category; anything not listed is 100%.
+#       Later lines (and later DMGKINDS lumps in your own WAD) override earlier ones.
+#
+
+weapon fist         blade
+weapon chainsaw     blade
+weapon pistol       bullet     # revolver
+weapon dualpistols  bullet
+weapon shotgun      shell      # rifle
+weapon supershotgun shell      # scattergun
+weapon chaingun     belt       # machinegun
+weapon chainfire    belt       # chaingun
+weapon missile      fire       # fireball
+weapon plasma       fire       # devil's breath
+weapon tornado      tempest
+weapon arclightning tempest
+weapon snap         spirit
+weapon bfg          spirit     # thunderclap
+weapon hellfire     hellfire
+weapon spare        hellfire
+
+projectile thing 34 fire      # rocket
+projectile thing 35 fire      # plasma ball
+projectile thing 36 spirit    # BFG ball (and its tracers)
+projectile thing 43 spirit    # BFG spray
+projectile name tornado  tempest
+projectile name arcbolt  tempest
+projectile name hellfire hellfire
+
+# The roster took over Doom's monsters (same editor numbers), so the numbers below are Doom's.
+# Starting values to be playtested; edit freely.
+#
+# Modern (humans): weak to bullets/shells, a bit resistant to magic.
+vulnerability ednum 3004 firearm 115 magic 80      # pistol trooper
+vulnerability ednum 9    firearm 115 magic 80      # shotgun trooper
+vulnerability ednum 84   firearm 115 magic 80      # SMG trooper
+vulnerability ednum 65   firearm 115 magic 80      # chaingun trooper
+vulnerability ednum 21001 firearm 115 magic 80     # rocket trooper (new number)
+vulnerability ednum 68   firearm 115 magic 80      # shock trooper
+# Medieval: weak to magic.
+vulnerability ednum 3002 magic 125 firearm 90      # werewolf
+vulnerability ednum 3001 magic 125 firearm 90      # fire elemental
+vulnerability ednum 66   magic 125 firearm 90      # mad wizard
+vulnerability ednum 69   magic 125 firearm 90      # apprentice
+vulnerability ednum 3003 magic 125 firearm 90      # minister
+vulnerability ednum 67   firearm 35 magic 150      # golem: stone
+# Alien (mindeater 64, aegis 58, bore 3005, conjurer 71, hatred 3006): no particular vulnerabilities.
+# Bosses
+vulnerability ednum 16   firearm 50                # mecha: armoured
+vulnerability ednum 7    magic 40                  # giant beetle: resists magic

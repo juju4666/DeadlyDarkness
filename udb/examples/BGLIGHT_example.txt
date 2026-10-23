@@ -1,0 +1,33 @@
+# BGLIGHT_example.txt - every BGLIGHT command, with comments. Add a text lump named BGLIGHT to your map wad (SLADE)
+# and put what you need in it. See the manual, Part 4 (4.4 to 4.6), or LIGHTING.md. '#' and '//' start a comment.
+
+# colours: define before use; only the proportions matter
+color amber    255 170 60
+color sunlight 255 236 200
+
+# a new placeable light thing (number 20109). Place it in UDB after adding it to Includes/Begotten_lights.cfg.
+# stationary by default (baked with real shadows); add "movable" for a light on a lift or door.
+light 20109 brazier radius 380 strength 0.95 height 40 color amber flicker rate 9 depth 0.35 halo 90 corona 22
+light 20110 beacon  radius 500 strength 1.0  height 64 color red pulse period 3 depth 0.8
+light 20111 neon    radius 300 strength 0.9  height 8 ceiling tube 96 spot 40 85 pitch -90
+
+# the lights the game makes by itself
+# lantern radius 260 strength 0.5
+# muzzle radius 420 strength 1.0 color amber
+# missile radius 180 strength 0.7
+# explosion radius 300
+# powerup radius 160
+
+# fog for one level (a line without "map" applies to every level that has none of its own)
+fog map MAP01 color 34 40 54 density 0.0018 scatter 0.6 max 0.97
+# fog for the sectors with one TAG (set the sector tag in the editor); density 0 = clear air; up to 15 zones per level
+fog map MAP01 sector 5 color 56 34 74 density 0.0035 scatter 0.5 max 0.85
+fog map MAP01 sector 6 density 0
+
+# a sun (or moon): angle 0 east, 90 north, 180 west, 270 south; elevation 3-89 degrees.
+# Sectors with a sky ceiling (F_SKY1) are open to it; windows and doorways let it in.
+sun map MAP01 angle 250 elevation 50 color sunlight strength 0.9
+
+# weather: rain or snow through sky ceilings (the same sectors the sun shines on). density 0.1-3, wind -16..16,
+# thunder = average seconds between lightning strikes (rain only; 0 = none). `weather map MAP02 snow` for snow.
+weather map MAP01 rain density 1 wind 3 thunder 12

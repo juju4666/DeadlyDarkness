@@ -1,0 +1,68 @@
+# BGWEAPON - weapon slots, ammo and ammo costs for Begotten.
+#
+# The 8 slots each hold one weapon with a primary and a secondary (alt) fire
+# mode.  Every mode is one of the engine's 16 weapon entries:
+#
+#   fist  pistol  shotgun  chaingun  missile  plasma  bfg  chainsaw  supershotgun
+#   dualpistols  chainfire  tornado  arclightning  snap  hellfire  spare
+#
+# (numbers 0-15 work too).  In the game these are:
+#   knife (fist), pistol (the strong single shot), revolver (dualpistols, the weaker piercing shot), rifle (shotgun), scattergun
+#   (supershotgun), machinegun (chaingun), chaingun (chainfire), fireball (missile),
+#   devil's breath (plasma), tornado, arc lightning, snap, thunderclap (bfg),
+#   hellfire, chainsaw.
+#
+# Lines (anything after # or // is a comment):
+#
+#   slot <1-8> primary <weapon> alt <weapon|none>
+#   ammo <type> max <n> clip <n>       type: bullets shells belts fire tempest spirit hellfire
+#       max = most the player can carry (a backpack doubles it);
+#       clip = what a small pickup gives (a big one gives 5x).
+#   mode <weapon> ammo <type|none> use <n>
+#       which ammo the mode uses and how much one shot costs.
+#
+# Later lines (and BGWEAPON lumps in your own WAD) override earlier ones.
+# DEHACKED "Ammo per shot" and "Ammo type" of weapons are overridden by this lump.
+
+slot 1 primary fist       alt chainsaw
+slot 2 primary pistol     alt dualpistols
+slot 3 primary shotgun    alt supershotgun
+slot 4 primary chaingun   alt chainfire
+slot 5 primary plasma     alt missile
+slot 6 primary tornado    alt arclightning
+slot 7 primary snap       alt bfg
+slot 8 primary hellfire   alt none
+ammo bullets  max 200 clip 20
+ammo shells   max 60  clip 6
+ammo belts    max 300 clip 30
+ammo fire     max 200 clip 20
+ammo tempest  max 200 clip 20
+ammo spirit   max 100 clip 10
+ammo hellfire max 50  clip 5
+mode fist         ammo none
+mode chainsaw     ammo none
+mode pistol       ammo bullets  use 1
+mode dualpistols  ammo bullets  use 1
+
+# Revolver primary: ONE bullet, damage = (1..mod) x damage, stopped by the first thing it hits.
+# The pistol troopers (3004) fire with the same numbers (their foedamage % still applies).
+# spread is in tenths of a degree.
+pistolshot damage 10 mod 3 spread 40
+
+# Revolver secondary: ONE bullet, damage = (1..mod) x damage, that goes through up to `hits` monsters;
+# every monster after the first takes `falloff` percent of what the one before it took.
+# spread is in tenths of a degree.  (Its recovery time is in the weapon states: about 40 tics.)
+pierce damage 6 mod 3 hits 5 falloff 85 spread 0
+
+mode shotgun      ammo shells   use 1
+mode supershotgun ammo shells   use 4
+mode chaingun     ammo belts    use 1
+mode chainfire    ammo belts    use 1
+mode missile      ammo fire     use 4
+mode plasma       ammo fire     use 1
+mode tornado      ammo tempest  use 5
+mode arclightning ammo tempest  use 4
+mode snap         ammo spirit   use 5
+mode bfg          ammo spirit   use 25
+mode hellfire     ammo hellfire use 1
+mode spare        ammo none     use 0

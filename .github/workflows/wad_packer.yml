@@ -1,0 +1,36 @@
+name: Build WAD packer
+
+# Builds the stand-alone Windows (and Linux) program from tools/pack_wad.py.
+# Run it from the Actions tab ("Run workflow") or it runs when pack_wad.py changes.
+# The finished program is in the run's "Artifacts" section.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/pack_wad.py'
+      - '.github/workflows/wad_packer.yml'
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Linux tkinter
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Install
+        run: python -m pip install pillow pyinstaller
+      - name: Build
+        run: python -m PyInstaller --onefile --windowed --name BegottenWadPacker tools/pack_wad.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BegottenWadPacker-${{ runner.os }}
+          path: dist/*

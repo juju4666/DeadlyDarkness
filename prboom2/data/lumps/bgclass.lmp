@@ -1,0 +1,188 @@
+# BGCLASS: player classes for Begotten.
+#
+# Every "class" line starts a class; the lines below it set its numbers.  The
+# built-in text of the engine is identical to this file; a BGCLASS lump in your
+# own WAD is read afterwards, so it can change a class (repeat its "class"
+# line, then list the numbers again -- anything you leave out goes back to the
+# default of a new class) or add new ones (up to 8 in total, the first
+# three are what class-flagged map things refer to: class 1 = first class,
+# class 2 = second class, class 3 = third class).
+#
+#   class <word> "<Display name>"
+#   health <n>                     starting health
+#   armor <n>                      starting armor points (green armor when > 0)
+#   speed <pct>                    walking / running speed in percent of the original game's (soldier 90, witch 110, swordsman 120)
+#   jump <height>                  how high the class' jump rises, in map units (0 = the class cannot jump).
+#                                  Soldier 28 (half the player's height), witch 37 (two thirds), swordsman 56
+#                                  (its full height).  A ledge can be jumped onto when it is lower than this
+#                                  (stairs up to 24 are walked anyway).  Gravity of the sector still applies:
+#                                  low-gravity sectors give higher jumps.  The jump button is the JUMP key
+#                                  (Right Alt by default) / controller button B.  A map can forbid jumping
+#                                  in its UMAPINFO.
+#   meleeonly                      the class uses the knife only: it never owns guns and cannot pick up
+#                                  weapons or ammunition
+#   blade <min> <max>              damage range of the knife (stock punch is 2-20; berserk does not
+#                                  apply).  145-205 kills a 150 hp demon in one hit most of the time
+#   foeaim <pct>                   how scattered monsters' hitscan fire (zombieman, shotgunner, chaingunner,
+#                                  SS, spider mastermind ...) is when aimed at this class, in percent of
+#                                  the normal spread: 100 = normal, 0 = every shot aimed dead on
+#   parry <tics>                   the class can parry: its secondary fire on the knife raises a guard
+#                                  that lasts this many tics (35 per second), see below
+#   maxhealth <n>                  health limit of stimpaks, medikits and berserk (normally 100)
+#   maxbonus <n>                   limit of health bonuses / potions (normally 200)
+#   maxsoul <n>                    limit of the soulsphere (normally 200)
+#   megahealth <n>                 what the megasphere sets health to (normally 200)
+#                                  (leave a limit out to keep the normal value)
+#   weapons <mode> ...             weapons owned at the start (see BGWEAPON for names)
+#   ammo <type> <n>                starting ammo (bullets shells belts fire tempest spirit hellfire)
+#   maxammo <type> <pct>           ammo capacity in percent of the normal maximum
+#   swapspeed <category> <pct>    how fast the class raises / lowers weapons of that category when it changes
+#                                  weapon, in percent of normal (100 = normal, 150 = faster); categories:
+#                                  melee firearm magic special
+#   damage <kind|category> <pct>   damage the class deals (kinds: blade bullet shell belt
+#                                  fire tempest spirit hellfire; categories: melee firearm
+#                                  magic special).  A kind overrides its category.
+#   firerate <category> <pct>      fire rate of that category of weapon
+#   spread <category> <pct>        spread of that category of weapon (lower = more accurate)
+#
+# unlock campaign: the class is hidden in the menu until every non-secret map has been finished
+# (any difficulty, single player or co-op; see begotten_profile.txt and the BGPROGRESS lump).
+# While the "Unlock All Classes (Dev)" option is on, locked classes are always selectable.
+#
+# Parry (classes with "parry <tics>"): alt fire with the knife raises a guard.  For <tics> tics
+# (swordsman: 10) everything coming from the front is turned aside: projectiles are sent
+# where the player aims (at the monster under the crosshair, else straight ahead) at twice
+# the speed and twice the damage (bosses' too), bullets hit the shooter instead, and a melee attacker is
+# stunned for about a second and shoved back (bosses are shoved but never stunned).  The player is planted while guarding, and the button has to be pressed again for every parry.
+# Every parried blow renews the window (a burst of shots is parried shot after shot), shoves the
+# player back a little, and spares the recovery; a miss leaves the player open for ~0.5 s.
+#
+# Class art (everything is optional; whatever a class has no art for uses the stock art):
+#   sprite <ORIG> <NEW>            draw this class' things / weapons with sprite NEW wherever the
+#                                  stock game uses sprite ORIG.  Player body: "sprite PLAY CPLY";
+#                                  pistol in hand: "sprite PISG CPIS" (see the table below).  Put
+#                                  the lumps (CPLYA1, CPLYA2A8 ...) between S_START and S_END of
+#                                  your WAD, frames A, B, C ... without gaps, as for any sprite.
+#                                  A frame the class does not have is drawn with the stock sprite.
+#   sound <slot> <lump>            this class' own voice instead of the stock player sounds.  Slots:
+#                                    pain    taking damage              (stock DSPLPAIN)
+#                                    death   dying                      (stock DSPLDETH)
+#                                    xdeath  dying gibbed / by massive damage (stock DSPDIEHI, DSSLOP)
+#                                    oof     landing hard / hitting a wall (stock DSOOF)
+#                                    noway   pressing use on something that will not open (stock DSNOWAY)
+#                                    jump    jumping (no stock sound: silent unless you set one)
+#                                  <lump> is the sound lump name, e.g. "sound pain DSWPAIN".  A slot left out
+#                                  keeps the stock sound; "sound pain -" puts the stock sound back.
+#   pose <kind> <SPRITE|-> [frames [tics]] [weapon <name>]
+#                                  how OTHER players (and you, in split-screen / the mirror of the
+#                                  network) see this class, in the world.  <SPRITE> is a 4-letter
+#                                  sprite name (lumps SPRTA1.. SPRTA8, SPRTB1.. ...); "-" removes the
+#                                  pose.  frames = how many frames (A, B, C ...; default 1), tics = game
+#                                  tics each frame stays (default 4).  Kinds:
+#                                    stand   idle (frames loop)
+#                                    run     walking / running (frames loop from the first step)
+#                                    shoot   attacking: plays A.. from the moment of the shot, holds the last
+#                                            frame (the stock muzzle-flash brightness is kept)
+#                                    jump    frame A rising, B at the peak, C falling (also when dropping off
+#                                            a ledge); frames/tics are ignored
+#                                    parry   while the guard is up (swordsman): plays A.. as the guard clock runs; with three or more frames the last one
+#                                            is an outward swing shown for a few tics after a parried blow, the others hold
+#                                  With "weapon <name>" (names as in BGWEAPON) the pose is only used while
+#                                  that weapon is in hand; a weapon pose wins over the class default.
+#                                  Priority: parry, shoot, jump, run, stand.  A kind without a pose falls
+#                                  back to the stand pose of that weapon, then to the normal sprite.
+#                                  Pain and death keep the normal (class "sprite PLAY ...") frames.
+#                                  All 8 directions are drawn as separate pictures when the lumps are
+#                                  SPRTA1 SPRTA2 ... SPRTA8 (no mirroring); 16 directions are possible too.
+#                                  Frames must not have gaps; a missing frame uses the nearest earlier one.
+#   edit <class>                   reopens an existing class (soldier / witch / swordsman) and changes
+#                                  only the lines that follow, keeping everything else.  Handy in a
+#                                  separate BGCLASS lump that adds poses to the built-in classes.
+#   face <XYZ>                     status bar faces: lumps XYZST00 XYZST01 ... instead of STFST00
+#                                  STFST01 ... (same names as the stock STF* lumps, with XYZ in
+#                                  place of STF); a face missing from the set uses the stock one.
+#   aircontrol <pct>               steering while airborne, as a percentage of the ground acceleration (0 = a
+#                                  jump only keeps its momentum). Steering never makes you faster than a
+#                                  running player, but it keeps any speed you already had (a lunge).
+#   charge <tics> <min> <max>      held attack (the knife / sword button held down): <tics> to a full charge,
+#                                  and the stab's damage at a split-second hold / at a full charge. A click
+#                                  (released within 9 tics) is the normal blade attack ("blade").
+#   lunge <min> <max>              how fast the stab propels the player, map units per tic, at the weakest /
+#                                  full charge. On a hit the target is pushed with that momentum, and the stab's
+#                                  damage scales with the player's speed at impact (full while still carried,
+#                                  never below 25%).
+#   riposte <damage>               a click on a stunned monster does this instead of a slash.
+# Stock sprite names: PLAY (player body); weapons held in the view: PUNG (knife / snap),
+# SAWG (chainsaw), PISG (pistols), SHTG (rifle / arc lightning), SHT2 (scattergun),
+# CHGG (machinegun / chaingun), MISG (fireball / hellfire), PLSG (tornado / devil's breath),
+# BFGG (thunderclap); muzzle flashes PISF SHTF SHT2 CHGF MISF PLSF BFGF.
+#
+# Class-flagged map things (Hexen thing flags Class 1/2/3 in Ultimate Doom
+# Builder) are only spawned for the matching class; a thing with none of the
+# three flags is spawned for everybody.
+
+class soldier "Soldier"
+  health 100
+  armor 0
+  speed 90
+  jump 28
+  aircontrol 15
+  maxhealth 100
+  maxbonus 200
+  maxsoul 200
+  megahealth 200
+  weapons fist pistol
+  ammo bullets 50
+  damage firearm 115
+  damage magic 85
+  firerate firearm 110
+  firerate magic 90
+  spread firearm 85
+  spread magic 115
+  swapspeed firearm 150
+  swapspeed magic 75
+
+class witch "Witch"
+  health 90
+  armor 0
+  speed 110
+  jump 37
+  aircontrol 30
+  maxhealth 90
+  maxbonus 180
+  maxsoul 180
+  megahealth 180
+  weapons fist pistol plasma
+  ammo bullets 40
+  ammo fire 20
+  maxammo tempest 125
+  maxammo fire 125
+  maxammo spirit 125
+  damage firearm 85
+  damage magic 125
+  firerate firearm 90
+  firerate magic 110
+  spread firearm 120
+  spread magic 85
+  swapspeed magic 150
+  swapspeed firearm 75
+
+class swordsman "Swordsman"
+  health 120
+  armor 0
+  speed 120
+  jump 56
+  aircontrol 80
+  maxhealth 120
+  maxbonus 220
+  maxsoul 220
+  megahealth 220
+  parry 7
+  foeaim 0
+  unlock campaign
+  meleeonly
+  blade 45 55
+  charge 70 1 100
+  lunge 10 24
+  riposte 200
+  weapons fist

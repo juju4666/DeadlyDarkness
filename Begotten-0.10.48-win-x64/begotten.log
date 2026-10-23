@@ -1,0 +1,326 @@
+(log file: C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten.log)
+M_LoadDefaults: Load system defaults.
+ default file: C:\Users\Coletivo\AppData\Roaming\begotten/begotten.cfg
+ found C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten-data.wad
+
+Begotten v0.10.48
+ found C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten.wad
+IWAD found: C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten.wad
+V_Init: allocate screens.
+V_InitMode: using software video mode
+I_CalculateRes: trying to optimize screen pitch
+ test case for pitch=1280 is processed 20635 times for 100 msec
+ test case for pitch=1312 is processed 100480 times for 100 msec
+ optimized screen pitch is 1312
+I_InitScreenResolution: Using resolution 1280x720
+Begotten is based on dsda-doom (https://github.com/kraflab/dsda-doom/)
+and is released under the GNU General Public license v2.0.
+You are welcome to redistribute it under certain conditions.
+It comes with ABSOLUTELY NO WARRANTY. See the file COPYING for details.
+
+Playing: Begotten
+W_Init: Init WADfiles.
+ adding C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten.wad
+ adding C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten-data.wad
+W_InitCache
+G_ReloadDefaults: Checking OPTIONS.
+Detected COMPLVL lump: 21
+Loading DEH lump from C:\Users\Coletivo\Downloads\Begotten-0.10.48-win-x64/begotten.wad
+bg_LightsInit: 16 light things
+BGPAL: 3 palette range(s), default palette 0
+dsda_InitWadStats: Setting up wad stats.
+Using data file directory: C:\Users\Coletivo\AppData\Roaming\begotten/begotten_data/begotten
+
+Font Bounds: 0.275347:1.000000 x1.379971
+M_Init: Init miscellaneous info.
+SetRatio: width/height parameters 1280x720
+SetRatio: storage aspect ratio 16:9
+SetRatio: assuming square pixels
+SetRatio: display aspect ratio 16:9
+SetRatio: gl_ratio 2.133334
+SetRatio: multiplier 3/4
+R_Init: Init DOOM refresh daemon - 
+R_LoadTrigTables: Endianness...ok.
+R_InitData: BGSCALE: sprites 2.50, textures 2.50, weapons 2.50 pixels per unit
+Textures Flats Sprites 
+R_Init: R_InitPlanes R_InitLightTables R_InitSkyMap R_InitTranslationsTables R_InitPatches 
+P_Init: Init Playloop state.
+R_FlatNumForName: LAVA4 not found
+I_Init: Setting up machine state.
+I_InitSound: audio driver wasapi
+ configured audio device with 1024 samples/slice
+Fluidplayer: Fluidsynth version 2.6.1
+portmidiplayer device list:
+  MMSystem:Microsoft MIDI Mapper
+  MMSystem:Microsoft GS Wavetable Synth
+portmidiplayer: Opening device MMSystem:Microsoft MIDI Mapper for output
+I_InitSound: sound module ready
+S_Init: Setting up sound.
+ Precaching all sound effects... done
+dsda_InitFont: Loading the hud fonts.
+I_InitGraphics: 1280x720
+I_UpdateVideoMode: 0x2000, SDL buffer, direct access
+SetRatio: width/height parameters 1280x720
+SetRatio: storage aspect ratio 16:9
+SetRatio: assuming square pixels
+SetRatio: display aspect ratio 16:9
+SetRatio: gl_ratio 2.133334
+SetRatio: multiplier 3/4
+dsda_InitGameController: no game controller connected (yet)
+ST_Init: Init status bar.
+R_FlatNumForName: GRNROCK not found
+RegisterSongEx: Using player fluidsynth midi player
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 188 ms (see the warnings above)
+PERF: 38.1 fps average, worst frame 1517 ms, software, 0 textures built (0 MB)
+PERF: 46.7 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 44.5 fps average, worst frame 74 ms, software, 0 textures built (0 MB)
+PERF: 45.3 fps average, worst frame 42 ms, software, 0 textures built (0 MB)
+PERF: 46.2 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 45.5 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 44.5 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 45.6 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 45.8 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 42.9 fps average, worst frame 120 ms, software, 0 textures built (0 MB)
+PERF: 32.4 fps average, worst frame 57 ms, software, 0 textures built (0 MB)
+PERF: 31.7 fps average, worst frame 44 ms, software, 0 textures built (0 MB)
+PERF: 35.1 fps average, worst frame 57 ms, software, 0 textures built (0 MB)
+PERF: 35.8 fps average, worst frame 51 ms, software, 0 textures built (0 MB)
+PERF: 32.0 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 32.4 fps average, worst frame 50 ms, software, 0 textures built (0 MB)
+PERF: 33.2 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 32.6 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 32.7 fps average, worst frame 57 ms, software, 0 textures built (0 MB)
+PERF: 30.5 fps average, worst frame 51 ms, software, 0 textures built (0 MB)
+PERF: 31.3 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 32.3 fps average, worst frame 50 ms, software, 0 textures built (0 MB)
+PERF: 34.2 fps average, worst frame 53 ms, software, 0 textures built (0 MB)
+PERF: 24.4 fps average, worst frame 95 ms, software, 0 textures built (0 MB)
+PERF: 23.6 fps average, worst frame 89 ms, software, 0 textures built (0 MB)
+PERF: 23.3 fps average, worst frame 101 ms, software, 0 textures built (0 MB)
+PERF: 24.9 fps average, worst frame 50 ms, software, 0 textures built (0 MB)
+PERF: 27.6 fps average, worst frame 51 ms, software, 0 textures built (0 MB)
+PERF: 31.5 fps average, worst frame 53 ms, software, 0 textures built (0 MB)
+PERF: 31.8 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 31.5 fps average, worst frame 52 ms, software, 0 textures built (0 MB)
+PERF: 31.8 fps average, worst frame 63 ms, software, 0 textures built (0 MB)
+PERF: 31.2 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 30.3 fps average, worst frame 50 ms, software, 0 textures built (0 MB)
+PERF: 31.4 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 31.3 fps average, worst frame 54 ms, software, 0 textures built (0 MB)
+PERF: 31.8 fps average, worst frame 54 ms, software, 0 textures built (0 MB)
+PERF: 32.4 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 32.3 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 31.2 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 32.0 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 31.4 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 31.1 fps average, worst frame 53 ms, software, 0 textures built (0 MB)
+PERF: 31.7 fps average, worst frame 65 ms, software, 0 textures built (0 MB)
+PERF: 30.9 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 30.8 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 31.3 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 31.5 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 31.4 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 31.1 fps average, worst frame 63 ms, software, 0 textures built (0 MB)
+PERF: 31.2 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 31.2 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 31.3 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 31.0 fps average, worst frame 57 ms, software, 0 textures built (0 MB)
+PERF: 31.6 fps average, worst frame 54 ms, software, 0 textures built (0 MB)
+PERF: 30.9 fps average, worst frame 49 ms, software, 0 textures built (0 MB)
+PERF: 31.7 fps average, worst frame 56 ms, software, 0 textures built (0 MB)
+PERF: 32.2 fps average, worst frame 59 ms, software, 0 textures built (0 MB)
+V_InitMode: using software video mode
+I_CalculateRes: trying to optimize screen pitch
+ test case for pitch=1280 is processed 69039 times for 100 msec
+ test case for pitch=1312 is processed 118497 times for 100 msec
+ optimized screen pitch is 1312
+I_InitScreenResolution: Using resolution 1280x720
+I_UpdateVideoMode: 0x3001, SDL buffer, direct access
+SetRatio: width/height parameters 1280x720
+SetRatio: storage aspect ratio 16:9
+SetRatio: assuming square pixels
+SetRatio: display aspect ratio 16:9
+SetRatio: gl_ratio 2.133334
+SetRatio: multiplier 3/4
+PERF: 34.4 fps average, worst frame 435 ms, software, 0 textures built (0 MB)
+PERF: 45.9 fps average, worst frame 51 ms, software, 0 textures built (0 MB)
+PERF: 45.8 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 45.0 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 42.6 fps average, worst frame 40 ms, software, 0 textures built (0 MB)
+PERF: 44.4 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 45.7 fps average, worst frame 40 ms, software, 0 textures built (0 MB)
+PERF: 44.8 fps average, worst frame 50 ms, software, 0 textures built (0 MB)
+PERF: 45.1 fps average, worst frame 42 ms, software, 0 textures built (0 MB)
+PERF: 43.8 fps average, worst frame 52 ms, software, 0 textures built (0 MB)
+PERF: 44.7 fps average, worst frame 45 ms, software, 0 textures built (0 MB)
+PERF: 41.4 fps average, worst frame 45 ms, software, 0 textures built (0 MB)
+PERF: 44.1 fps average, worst frame 42 ms, software, 0 textures built (0 MB)
+PERF: 44.3 fps average, worst frame 45 ms, software, 0 textures built (0 MB)
+PERF: 43.8 fps average, worst frame 44 ms, software, 0 textures built (0 MB)
+PERF: 43.2 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 43.7 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 44.1 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 44.8 fps average, worst frame 42 ms, software, 0 textures built (0 MB)
+PERF: 45.2 fps average, worst frame 46 ms, software, 0 textures built (0 MB)
+PERF: 44.2 fps average, worst frame 46 ms, software, 0 textures built (0 MB)
+PERF: 45.9 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 44.4 fps average, worst frame 42 ms, software, 0 textures built (0 MB)
+PERF: 43.3 fps average, worst frame 45 ms, software, 0 textures built (0 MB)
+PERF: 45.5 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 43.1 fps average, worst frame 65 ms, software, 0 textures built (0 MB)
+PERF: 43.4 fps average, worst frame 46 ms, software, 0 textures built (0 MB)
+PERF: 45.5 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 43.4 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+PERF: 43.0 fps average, worst frame 46 ms, software, 0 textures built (0 MB)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 200 ms (see the warnings above)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 174 ms (see the warnings above)
+PERF: 28.6 fps average, worst frame 1510 ms, software, 0 textures built (0 MB)
+PERF: 43.6 fps average, worst frame 48 ms, software, 0 textures built (0 MB)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 177 ms (see the warnings above)
+PERF: 38.7 fps average, worst frame 1473 ms, software, 0 textures built (0 MB)
+PERF: 44.2 fps average, worst frame 46 ms, software, 0 textures built (0 MB)
+PERF: 41.8 fps average, worst frame 47 ms, software, 0 textures built (0 MB)
+PERF: 43.3 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 43.0 fps average, worst frame 43 ms, software, 0 textures built (0 MB)
+PERF: 44.4 fps average, worst frame 39 ms, software, 0 textures built (0 MB)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 173 ms (see the warnings above)
+PERF: 37.0 fps average, worst frame 1466 ms, software, 0 textures built (0 MB)
+PERF: 44.5 fps average, worst frame 45 ms, software, 0 textures built (0 MB)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 179 ms (see the warnings above)
+PERF: 38.0 fps average, worst frame 1499 ms, software, 0 textures built (0 MB)
+PARRY: ball turned at tic 368, facing 15.8, pitch 0.0, along the crosshair
+PERF: 44.8 fps average, worst frame 38 ms, software, 0 textures built (0 MB)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 179 ms (see the warnings above)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 183 ms (see the warnings above)
+PERF: 31.8 fps average, worst frame 1475 ms, software, 0 textures built (0 MB)
+R_FlatNumForName: GRNROCK not found
+Level checksum: 2d60868546ed11d2a12734b076119af9
+P_GetNodesVersion: using XGLN zdoom nodes
+BGLIGHT: sun on this level (from 250 degrees, 50 up, strength 0.9)
+BGLIGHT: fog on this level (3 zones): level colour 34 40 54 density 0.0018 scatter 0.6; sector tag colour 56 34 74 density 0.0035 scatter 0.5; sector tag colour 40 46 58 density 0 scatter 0.8
+BGLIGHT: rain on this level (density 1, wind 3, thunder every ~12 s)
+BGLIGHT warning: stationary light 20101 at (24, 24) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 232) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20101 at (24, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20201) if this light must change
+BGLIGHT warning: stationary light 20105 at (120, 128) is near a moving sector (sector 18, a door or lift): the baked light will not follow it - use the movable twin (20205) if this light must change
+BGLIGHT warning: stationary light 20107 at (1330, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20207) if this light must change
+BGLIGHT warning: stationary light 20106 at (1646, -30) is near a moving sector (sector 125, a door or lift): the baked light will not follow it - use the movable twin (20206) if this light must change
+BGLIGHT: baked 14 stationary lights in 178 ms (see the warnings above)
+PERF: 38.5 fps average, worst frame 1476 ms, software, 0 textures built (0 MB)
+PERF: 43.4 fps average, worst frame 45 ms, software, 0 textures built (0 MB)
+PERF: 46.2 fps average, worst frame 44 ms, software, 0 textures built (0 MB)
+PERF: 46.1 fps average, worst frame 44 ms, software, 0 textures built (0 MB)
+PERF: 43.7 fps average, worst frame 42 ms, software, 0 textures built (0 MB)
+PERF: 45.0 fps average, worst frame 36 ms, software, 0 textures built (0 MB)
+PERF: 43.8 fps average, worst frame 38 ms, software, 0 textures built (0 MB)
+PERF: 44.0 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 44.7 fps average, worst frame 41 ms, software, 0 textures built (0 MB)
+PERF: 45.5 fps average, worst frame 36 ms, software, 0 textures built (0 MB)
+PARRY: ball turned at tic 3354, facing 15.2, pitch 0.0, autoaim on a monster
+PERF: 45.0 fps average, worst frame 38 ms, software, 0 textures built (0 MB)
+PARRY: ball turned at tic 3552, facing 80.2, pitch 0.0, autoaim on a monster
+PERF: 45.3 fps average, worst frame 46 ms, software, 0 textures built (0 MB)
+PERF: 45.3 fps average, worst frame 35 ms, software, 0 textures built (0 MB)
+PERF: 44.4 fps average, worst frame 36 ms, software, 0 textures built (0 MB)
+
+Exit Sequence[0]: I_EssentialQuit (0)
+Exit Sequence[1]: I_ShutdownGraphics (0)
+Exit Sequence[1]: I_ShutdownMusic (0)
+Exit Sequence[1]: I_ShutdownSound (0)
+Exit Sequence[2]: I_Quit (0)
