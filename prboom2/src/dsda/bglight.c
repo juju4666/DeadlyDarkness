@@ -1822,7 +1822,7 @@ static void bg_CollectOccluders(void)
   {
     const mobj_t* mo;
     double x, y, r;
-    int j, near = 0;
+    int j, in_reach = 0;
 
     if (th->function != P_MobjThinker)
       continue;
@@ -1835,10 +1835,10 @@ static void bg_CollectOccluders(void)
     x = bg_Fix(mo->x);
     y = bg_Fix(mo->y);
     r = bg_Fix(mo->radius);
-    for (j = 0; j < num_lights && !near; ++j)
+    for (j = 0; j < num_lights && !in_reach; ++j)
       if (lights[j].shadow && hypot(x - lights[j].a[0], y - lights[j].a[1]) < lights[j].radius + r)
-        near = 1;
-    if (!near)
+        in_reach = 1;
+    if (!in_reach)
       continue;
     occ[num_occ].x = x;
     occ[num_occ].y = y;

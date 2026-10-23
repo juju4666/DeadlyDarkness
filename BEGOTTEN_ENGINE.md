@@ -698,6 +698,10 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 
 
+## 0.10.52 - Windows build fix
+
+* `near` is a macro in the Windows headers: a local called `near` in `bg_CollectOccluders` broke the MSVC build of 0.10.51 (renamed `in_reach`). Do not use `near`, `far`, `min`, `max` as local names in engine code.
+
 ## 0.10.51 - things cast shadows
 
 * Solid things block the beam of shadow-casting live lights: `bg_CollectOccluders` (once a frame, every `P_MobjThinker` mobj that is MF_SOLID and not a missile, corpse or no-clip, within a shadow light's radius; at most `BG_MAXOCC` = 48) and `bg_ThingBlocks` (segment against an upright cylinder: radius, z..z+height) called from `bg_ShadowLit` after the wall rays. A thing the light is inside (the player's own body) or the target stands on never blocks. Sprites lit by the beam get the same test, so a monster behind another is dark.
