@@ -698,6 +698,13 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 
 
+## 0.10.53 - flashlight column fix, faster gyros with a glow
+
+* **Wall flicker with the flashlight**: the world point of a wall column was worked out from the wall's rounded fixed-point `scale`, which jitters from column to column (a lot at a shallow angle), so the shadow ray of a column next to a shadow edge came out lit or dark at random: single-pixel stripes. `bg_ColumnPoint` now intersects the view ray with the wall's own line (`wall.ax/ay/dx/dy`), exact, with a fallback to the old value when the two disagree. It also sharpens fog distance on walls. Not reproduced here in my own test room (it showed no stripes either way), so this is the likely cause from the video, not a confirmed one.
+* **Gyro speed**: default `spin 480` (was 180). A placed gyro's first thing argument sets the speed in tens of degrees a second (0 = default 480); for lights that spin, arg0 is no longer the radius (the BGLIGHT line sets it).
+* **`glow RADIUS STRENGTH`** in a BGLIGHT `light` line: a second, round light at the same spot (placed-light path, so the light has to be movable). The gyros have `glow 320 0.6`, the small red (amber, blue) pool round the lamp. Each gyro now uses two of the 12 live-light slots.
+* Editor config: gyro things' arg0 is "Turn speed".
+
 ## 0.10.52 - Windows build fix
 
 * `near` is a macro in the Windows headers: a local called `near` in `bg_CollectOccluders` broke the MSVC build of 0.10.51 (renamed `in_reach`). Do not use `near`, `far`, `min`, `max` as local names in engine code.

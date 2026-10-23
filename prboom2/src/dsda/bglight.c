@@ -99,6 +99,7 @@ typedef struct
   double corona;                   // radius in screen pixels of the corona (a bright star that keeps its size at any distance), 0 = none
   double cnear, cfar;              // the corona is invisible nearer than cnear map units and full beyond cfar
   dboolean shadow;                 // movable light that casts shadows (a ray to every lit point; BGLIGHT `shadow`)
+  double glow_radius, glow_strength; // a small point light at the light itself (BGLIGHT `glow`), e.g. the lamp of a gyro beacon
   double side, drop;               // flashlight only: held this far to the right of and below the eye (map units), so that shadows show
 } bg_lightdef_t;
 
@@ -161,11 +162,12 @@ static const char bg_default_lights[] =
   "light 20207 red_m    halo 40 corona 16 radius 400 strength 0.9 height 40 color red pulse movable\n"
   "light 20208 blue_m   halo 40 corona 16 radius 400 strength 0.9 height 40 color blue movable\n"
   "# gyro lights (20301-20303): a beam that turns round, like an emergency beacon. Always movable. `spin` is degrees per second\n"
-  "# (negative turns the other way); the thing's angle is where the beam points at the start, so two things 180 degrees apart\n"
+  "# (negative turns the other way; a placed gyro's first argument sets it, in tens of degrees per second); `glow RADIUS STRENGTH`\n"
+  "# adds a small round light at the lamp itself; the thing's angle is where the beam points at the start, so two things 180 degrees apart\n"
   "# make the two-beam kind. Thing_Deactivate / Thing_Activate (or the editor's Dormant flag) switch it off and on.\n"
-  "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color red   spin 180\n"
-  "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color amber spin 180\n"
-  "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color blue  spin 180\n"
+  "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color red   spin 480 glow 320 0.6\n"
+  "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color amber spin 480 glow 320 0.6\n"
+  "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color blue  spin 480 glow 320 0.6\n"
   "lantern radius 360 strength 0.6 height 52 color candle\n"
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
@@ -400,6 +402,14 @@ static void bg_ParseLightText(const char* text_in)
         }
         else if (!strcasecmp(w, "color") && (v = strtok_r(NULL, " \t\r", &save))) d.tint = bg_FindTint(v);
         else if (!strcasecmp(w, "pitch") && (v = strtok_r(NULL, " \t\r", &save))) d.pitch = atof(v);
+        else if (!strcasecmp(w, "glow"))
+        {
+          char* v1 = strtok_r(NULL, " \t\r", &save);
+          char* v2 = strtok_r(NULL, " \t\r", &save);
+
+          if (v1 && v2)
+            d.glow_radius = atof(v1), d.glow_strength = atof(v2);
+        }
         else if (!strcasecmp(w, "spin") && (v = strtok_r(NULL, " \t\r", &save)))
         {
           d.spin = atof(v);
@@ -1148,7 +1158,11 @@ void bg_LightsBeginFrame(void)
         double col[3];
         const double* cp = NULL;
 
-        if (mo->special_args[0] > 0) tmp.radius = 8.0 * mo->special_args[0];
+        // a turning light uses its first argument for the speed instead (tens of degrees a second)
+        if (mo->special_args[0] > 0 && tmp.spin != 0.0)
+          tmp.spin = (tmp.spin < 0 ? -10.0 : 10.0) * mo->special_args[0];
+        else if (mo->special_args[0] > 0)
+          tmp.radius = 8.0 * mo->special_args[0];
         if (mo->special_args[1] > 0) tmp.strength = 0.01 * mo->special_args[1];
         if (mo->special_args[2] | mo->special_args[3] | mo->special_args[4])
         {
@@ -1164,6 +1178,23 @@ void bg_LightsBeginFrame(void)
           yaw += tmp.spin * (M_PI / 180.0) * ((double) leveltime + (double) tic_vars.frac / 65536.0) / 35.0;
         bg_AddLight(&tmp, mo, x, y, z, yaw,
                     (unsigned) (mo->x >> 16) * 31u + (unsigned) (mo->y >> 16), cp);
+        if (tmp.glow_radius > 0 && tmp.glow_strength > 0)
+        {
+          // the small round light at the lamp itself (the beam alone leaves its own surroundings dark)
+          bg_lightdef_t g = tmp;
+
+          g.type = BGL_POINT;
+          g.spot_inner = g.spot_outer = 0;
+          g.spin = 0;
+          g.pitch = 0;
+          g.radius = tmp.glow_radius;
+          g.strength = tmp.strength * tmp.glow_strength;
+          g.halo = 0;
+          g.corona = 0;
+          g.shadow = false;
+          g.glow_radius = 0;
+          bg_AddLight(&g, mo, x, y, z, yaw, (unsigned) (mo->x >> 16) * 31u + (unsigned) (mo->y >> 16), cp);
+        }
       }
     }
 
@@ -2982,9 +3013,25 @@ static double bg_ColumnPoint(int x, fixed_t scale, double* px, double* py)
   double ang = (double) viewangle * (2.0 * M_PI / 4294967296.0) + theta;
   double depth = bg_Fix(projectiony) / bg_Fix(scale);   // scale is the vertical scale
   double r = depth / cos(theta);
+  double vx = bg_Fix(viewx), vy = bg_Fix(viewy), cx = cos(ang), cy = sin(ang);
 
-  *px = bg_Fix(viewx) + r * cos(ang);
-  *py = bg_Fix(viewy) + r * sin(ang);
+  // `scale` is a rounded fixed-point number, so a point worked out from it jitters from column to column, and at a
+  // shallow angle to the wall by a lot. A shadow edge then flickers (its columns come out lit or dark at random). The
+  // exact point is where the view ray meets the wall's own line.
+  if (wall.len > 0.001)
+  {
+    double den = cx * wall.dy - cy * wall.dx;
+
+    if (fabs(den) > 1e-6)
+    {
+      double t = ((wall.ax - vx) * wall.dy - (wall.ay - vy) * wall.dx) / den;
+
+      if (t > 0 && fabs(t - r) < 0.25 * r + 4.0)
+        r = t;
+    }
+  }
+  *px = vx + r * cx;
+  *py = vy + r * cy;
   return r;
 }
 

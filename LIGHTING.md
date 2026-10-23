@@ -39,11 +39,11 @@ Each of these has a **movable twin** with the number plus 100: 20201 torch, 2020
 
 | Number | Name        | Shape                                              | Behaviour             |
 |-------:|-------------|----------------------------------------------------|-----------------------|
-| 20301  | Red beacon  | ceiling cone 12/30 degrees, tilted 20 down, radius 480 | turns 180 degrees a second |
+| 20301  | Red beacon  | ceiling cone 12/30 degrees, tilted 20 down, radius 480, plus a small round glow (radius 320) at the lamp | turns 480 degrees a second |
 | 20302  | Amber beacon | same                                               | same                  |
 | 20303  | Blue beacon  | same                                               | same                  |
 
-They are always movable (no shadows). The thing's angle is where the beam points when the level starts, so two things
+They are always movable (no shadows). **Speed:** the thing's first argument ("Turn speed") is in tens of degrees a second: 48 = 480 (the default, when left at 0), 20 = 200, 100 = 1000 (a gyro's first argument is the speed, not the radius). The thing's angle is where the beam points when the level starts, so two things
 180 degrees apart make a two-beam beacon. Your own: `light 20310 mybeacon radius 400 strength 1 height 24 ceiling spot 10 25 pitch -10 color red spin -90`.
 
 ### Switching a light off and on
@@ -169,6 +169,7 @@ Options for `light`:
 | `spot INNER OUTER`    | a cone: full inside INNER degrees, fading out at OUTER (half angles) |
 | `pitch DEG`           | cone direction, -90 = straight down                                  |
 | `shadow`              | with `movable`: the live light is blocked by walls, steps and closed doors (a ray per lit point, so use it on one or two lights, not twenty) |
+| `glow RADIUS STRENGTH` | with `movable`/`spin`: also a small round light of that radius at the light itself, at STRENGTH times the light's strength (the gyros have `glow 320 0.6`) |
 | `spin DPS`            | the cone or tube turns round DPS degrees a second (negative = the other way); implies `movable` |
 | `tube LEN`            | a strip light LEN units long instead of a point                      |
 | `flicker`             | random flicker (see below)                                           |
