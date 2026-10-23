@@ -698,6 +698,12 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 
 
+## 0.10.54 - dark colours no longer go grey or green
+
+* Every coloured light and every fog table matches a computed colour back to the palette through a lookup cube (`nearest_cube`). Two faults showed in the dark: the cube had 32 cells of 8 units a side, so dark colours (all channels under about 40) collapsed into a few cells and lost their hue (grey); and the search covered index 255, the spare dark green of every theme (12 40 22 in the crow palette), which about one in six dark cells picked (green). Now: 40 cells a side with edges at 255 * (l/40)^2 (about 3 units wide near black, 13 near white; `cube_q`, `BG_CUBE_AT`, `bg_Nearest`), and index 255 is never handed out. All four users (tint tables, fog tables, halos, weather) go through `bg_Nearest`.
+* The cube is rebuilt whenever the palette changes (damage and pickup flashes): 64,000 cells instead of 32,000, so about twice as long as before; not timed on slow machines.
+* Tested here: a dark room with fog colour 34 40 54 and a red lamp, old against new: the teal-green cast on the dark walls is gone.
+
 ## 0.10.53 - flashlight column fix, faster gyros with a glow
 
 * **Wall flicker with the flashlight**: the world point of a wall column was worked out from the wall's rounded fixed-point `scale`, which jitters from column to column (a lot at a shallow angle), so the shadow ray of a column next to a shadow edge came out lit or dark at random: single-pixel stripes. `bg_ColumnPoint` now intersects the view ray with the wall's own line (`wall.ax/ay/dx/dy`), exact, with a fallback to the old value when the two disagree. It also sharpens fog distance on walls. Not reproduced here in my own test room (it showed no stripes either way), so this is the likely cause from the video, not a confirmed one.

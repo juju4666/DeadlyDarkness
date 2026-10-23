@@ -1395,7 +1395,18 @@ static double bg_Total(const int* set, int count, double px, double py, double p
 
 #define BG_COLOUR_LEVELS 5                  // levels per channel: 125 colours
 static byte* tint_cache[BG_COLOUR_LEVELS * BG_COLOUR_LEVELS * BG_COLOUR_LEVELS + 1][BG_TINT_STEPS + 1][NUMCOLORMAPS];
-static byte* nearest_cube;                 // 32x32x32 colours -> palette index
+// colours -> palette index. The cells get narrower toward black (a cell edge is at 255 * (l / N)^2) because dark
+// colours sit close together, and 8-unit cells washed their hues out to grey. Index 255 is never handed out: it is the
+// spare dark green of every theme (the automap background), not a colour of the art.
+#define BG_CUBE 40
+static byte* nearest_cube;
+static unsigned char cube_q[256];           // 0..255 -> cell
+static byte bg_Nearest(int r, int g, int b);
+#define BG_CUBE_AT(r, g, b) nearest_cube[((int) cube_q[(r)] * BG_CUBE + (int) cube_q[(g)]) * BG_CUBE + (int) cube_q[(b)]]
+static byte bg_Nearest(int r, int g, int b)
+{
+  return BG_CUBE_AT(r < 0 ? 0 : r > 255 ? 255 : r, g < 0 ? 0 : g > 255 ? 255 : g, b < 0 ? 0 : b > 255 ? 255 : b);
+}
 static const byte* cache_pal;
 static const lighttable_t* cache_cmap;
 static unsigned cache_hash;
@@ -1439,18 +1450,27 @@ static void bg_CheckTintCache(void)
   cache_hash = h;
   cache_cmap = fullcolormap;
   if (!nearest_cube)
-    nearest_cube = malloc(32 * 32 * 32);
+    nearest_cube = malloc(BG_CUBE * BG_CUBE * BG_CUBE);
   {
-    int r, g, b;
+    int r, g, b, v;
+    int centre[BG_CUBE];
 
-    for (r = 0; r < 32; ++r)
-      for (g = 0; g < 32; ++g)
-        for (b = 0; b < 32; ++b)
+    for (v = 0; v < 256; ++v)
+    {
+      int q = (int) (sqrt((double) v / 255.0) * BG_CUBE);
+
+      cube_q[v] = (unsigned char) (q >= BG_CUBE ? BG_CUBE - 1 : q);
+    }
+    for (v = 0; v < BG_CUBE; ++v)
+      centre[v] = (int) (255.0 * ((v + 0.5) / BG_CUBE) * ((v + 0.5) / BG_CUBE) + 0.5);
+    for (r = 0; r < BG_CUBE; ++r)
+      for (g = 0; g < BG_CUBE; ++g)
+        for (b = 0; b < BG_CUBE; ++b)
         {
-          int cr = r * 8 + 4, cg = g * 8 + 4, cb = b * 8 + 4, i, best = 0;
+          int cr = centre[r], cg = centre[g], cb = centre[b], i, best = 0;
           long bd = 1L << 30;
 
-          for (i = 0; i < 256; ++i)
+          for (i = 0; i < 255; ++i)
           {
             long dr = pal[i * 3] - cr, dg = pal[i * 3 + 1] - cg, db = pal[i * 3 + 2] - cb;
             long d = dr * dr * 3 + dg * dg * 4 + db * db * 2;   // the eye cares most about green
@@ -1461,7 +1481,7 @@ static void bg_CheckTintCache(void)
               best = i;
             }
           }
-          nearest_cube[(r << 10) | (g << 5) | b] = (byte) best;
+          nearest_cube[(r * BG_CUBE + g) * BG_CUBE + b] = (byte) best;
         }
   }
 }
@@ -1492,7 +1512,7 @@ static const byte* bg_TintTable(int tint, int mq, int row)   // tint = colour co
 
         out[c] = v < 0 ? 0 : v > 255 ? 255 : (int) (v + 0.5);
       }
-      t[i] = nearest_cube[((out[0] >> 3) << 10) | ((out[1] >> 3) << 5) | (out[2] >> 3)];
+      t[i] = BG_CUBE_AT(out[0], out[1], out[2]);
     }
     *slot = t;
   }
@@ -2931,7 +2951,7 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
     int r = (int) (c[0] + (fc[0] - c[0]) * f + 0.5), g = (int) (c[1] + (fc[1] - c[1]) * f + 0.5),
         b = (int) (c[2] + (fc[2] - c[2]) * f + 0.5);
 
-    t[i] = nearest_cube[((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)];
+    t[i] = BG_CUBE_AT(r < 0 ? 0 : r > 255 ? 255 : r, g < 0 ? 0 : g > 255 ? 255 : g, b < 0 ? 0 : b > 255 ? 255 : b);
   }
   fog_hkey[h] = key;
   fog_hidx[h] = (short) fog_count++;
@@ -3678,7 +3698,7 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
       r = (int) (c[0] + gr * a * (255 - c[0]) * (1.0 / 255.0) + 0.5);
       g = (int) (c[1] + gg * a * (255 - c[1]) * (1.0 / 255.0) + 0.5);
       b = (int) (c[2] + gb * a * (255 - c[2]) * (1.0 / 255.0) + 0.5);
-      *p = nearest_cube[((r > 255 ? 31 : r >> 3) << 10) | ((g > 255 ? 31 : g >> 3) << 5) | (b > 255 ? 31 : b >> 3)];
+      *p = bg_Nearest(r, g, b);
     }
   }
 }
@@ -4192,7 +4212,7 @@ void bg_DrawWeather(int i, const int* floorclip, const int* ceilingclip)
       r = (int) (c[0] + (tr - c[0]) * aa + 0.5);
       g = (int) (c[1] + (tg - c[1]) * aa + 0.5);
       b = (int) (c[2] + (tb - c[2]) * aa + 0.5);
-      *p = nearest_cube[((r > 255 ? 31 : r >> 3) << 10) | ((g > 255 ? 31 : g >> 3) << 5) | (b > 255 ? 31 : b >> 3)];
+      *p = bg_Nearest(r, g, b);
     }
   }
 }
