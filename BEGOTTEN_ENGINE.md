@@ -778,3 +778,6 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 ## 0.10.57 - sector light 0 is pitch black
 * The darkest colormap rows were not black (each palette ramp ends in a faint colour, about (16,12,15)), so walls stayed visible in a sector at light 0. At load, private copies of the colormaps now fade rows 23-31 to true black (`bg_FadeColormap`, called from `R_InitColormaps`). Row 31 is black. Walls, floors and sprites all use the same colormap, so every path agrees.
 * The fade start can be tuned with env `BGLIGHT_BLACKROW` (default 22; a lower number darkens more of the range, 31 turns the fade off).
+
+## 0.10.58 - Hexen lightning off
+* A MAPINFO `lightning` line made sky sectors flash and swapped the sky (`P_InitLightning`). Begotten has its own weather, so that Hexen lightning is now ignored unless the env var `BEGOTTEN_HEXEN_LIGHTNING=1` is set. Rain/snow/thunder come only from BGLIGHT `weather` lines and the "Rain, Snow And Lightning" menu option.

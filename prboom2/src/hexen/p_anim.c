@@ -29,6 +29,7 @@
 #include "dsda/map_format.h"
 #include "dsda/mapinfo.h"
 
+#include <stdlib.h>
 #include "p_anim.h"
 
 #define ANIM_SCRIPT_NAME "ANIMDEFS"
@@ -310,7 +311,9 @@ void P_InitLightning(void)
     int i;
     int secCount;
 
-    if (!dsda_MapLightning())
+    // Begotten has its own weather (BGLIGHT `weather ... thunder`, menu option "Rain, Snow And Lightning"). The Hexen
+    // lightning (a MAPINFO `lightning` line: sky sectors flash and the sky swaps) is off unless BEGOTTEN_HEXEN_LIGHTNING=1.
+    if (!dsda_MapLightning() || !getenv("BEGOTTEN_HEXEN_LIGHTNING"))
     {
         LevelHasLightning = false;
         LightningFlash = 0;
