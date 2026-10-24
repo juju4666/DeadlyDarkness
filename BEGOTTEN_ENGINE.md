@@ -769,3 +769,12 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 * `tools/bgnodes.py MAP.wad [OUT.wad]`: builds the nodes with ZDBSP outside the editor (UDB under Wine crashes in its own nodebuilder step). The engine does not build nodes itself.
 * **Class-flagged player starts.** A Player start with only some classes ticked (Class 1 Soldier, 2 Witch, 3 Swordsman) is used by players of those classes; a start that fits nobody is kept as a fallback and used only when no fitting start exists, so a class can never be left without one (`bg_ClassAllowsPlayerStart` / `bg_StashStart` / `bg_FlushStarts` in bgclass.c). In co-op each player takes the start for his own class. Before this the flags were ignored on starts (the last start in the file won).
 * **UDMF thing flags fixed:** the loader pre-set Boom's "not single / dm / coop" bits, which are the same bit values as Dormant / Soldier / Witch, so class flags in UDMF maps were scrambled and things without `singleplayer` came out dormant. The bits are no longer set. (Binary Hexen-format maps were not affected.) Lab re-check: all demos still pass.
+
+## 0.10.56 - a smaller lantern, split-screen crosshairs, no stray glow pixels
+* **Lantern** default is now radius 150, strength 0.7 (was 360): the carried light only reaches about a sword's length, as in Dark Souls. Maps need their own lights (or sector light) to be seen further away.
+* **Split screen draws one crosshair per view**, centred in each player's own view (`HU_DrawCrosshairAt`, called from `bg_SplitDrawHud`); the single central one is drawn only when there is one view.
+* **Packer**: floor, wall and sprite art pixels that happened to match the fullbright glow colours (palette indices 240-254) are no longer mapped to them, so they cannot sparkle in the dark (FLOOR1 had 437 such pixels). Index 255 is never produced. Exact glow matches are kept only for art packed with glow on.
+
+## 0.10.57 - sector light 0 is pitch black
+* The darkest colormap rows were not black (each palette ramp ends in a faint colour, about (16,12,15)), so walls stayed visible in a sector at light 0. At load, private copies of the colormaps now fade rows 23-31 to true black (`bg_FadeColormap`, called from `R_InitColormaps`). Row 31 is black. Walls, floors and sprites all use the same colormap, so every path agrees.
+* The fade start can be tuned with env `BGLIGHT_BLACKROW` (default 22; a lower number darkens more of the range, 31 turns the fade off).

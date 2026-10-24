@@ -48,6 +48,8 @@ dboolean HU_Responder(event_t* ev);
 
 void HU_Ticker(void);
 void HU_Drawer(void);
+dboolean HU_CrosshairEnabled(void);
+void HU_DrawCrosshairAt(int cx, int cy, int health);   // split-screen: a crosshair at that screen pixel
 
 mobj_t *HU_Target(void);
 

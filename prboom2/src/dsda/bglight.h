@@ -67,4 +67,6 @@ int bg_SunSelfTest(char* msg, size_t msglen);   // sun rays on made-up geometry;
 int bg_FogSelfTest(char* msg, size_t msglen);   // the fog curve on made-up settings; returns failures
 int bg_LightLosSelfTest(char* msg, size_t msglen);   // shadow rays on made-up geometry; returns failures
 
+void bg_FadeColormap(byte* cm, const byte* pal);   // darkest colormap rows fade to black (call on a private copy)
+
 #endif

@@ -168,7 +168,7 @@ static const char bg_default_lights[] =
   "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color red   spin 480 glow 320 0.6\n"
   "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color amber spin 480 glow 320 0.6\n"
   "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color blue  spin 480 glow 320 0.6\n"
-  "lantern radius 360 strength 0.6 height 52 color candle\n"
+  "lantern radius 150 strength 0.7 height 52 color candle\n"
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
   "missile radius 230 strength 0.85 halo 28 corona 9 color auto\n"
@@ -184,7 +184,7 @@ static const char bg_default_lights[] =
 static bg_lightdef_t defs[BG_MAXDEFS];
 static int num_defs;
 static int first_type = -1;
-static bg_lightdef_t lantern = { 0, "lantern", BGL_POINT, 360, 0.6, 52, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1 };
+static bg_lightdef_t lantern = { 0, "lantern", BGL_POINT, 150, 0.7, 52, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1 };
 static bg_lightdef_t dyn_missile = { 0, "missile", BGL_POINT, 230, 0.85, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1 };
 static bg_lightdef_t dyn_explosion = { 0, "explosion", BGL_POINT, 420, 1.0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1 };
 static bg_lightdef_t dyn_powerup = { 0, "powerup", BGL_POINT, 220, 0.8, 24, false, 0, 0, 0, 0, 2, 0, 0.3, 2.0, -1, -1 };
@@ -1486,6 +1486,62 @@ static void bg_CheckTintCache(void)
           }
           nearest_cube[(r * BG_CUBE + g) * BG_CUBE + b] = (byte) best;
         }
+  }
+}
+
+// The darkest colormap rows are not black (a ramp's last shade is a faint colour), so a sector at light 0 still shows
+// its walls. The last rows fade to true black: row 31 is black, and the fade starts at BG_BLACK_ROW.
+#define BG_BLACK_ROW 22
+static double bg_RowFade(int row)
+{
+  static int start = -1;
+
+  if (start < 0)
+  {
+    const char* e = getenv("BGLIGHT_BLACKROW");
+
+    start = e ? atoi(e) : BG_BLACK_ROW;
+    if (start < 1) start = 1;
+    if (start > 31) start = 31;
+  }
+  if (row <= start)
+    return 1.0;
+  return row >= 31 ? 0.0 : (double) (31 - row) / (double) (31 - start);
+}
+
+// Fades the darkest rows of a colormap towards black, in place. Called on a private copy when the colormaps are
+// loaded, so every drawing path (ours and the plain one for walls and flats no light reaches) sees the same black.
+void bg_FadeColormap(byte* cm, const byte* pal)
+{
+  int row, i, j;
+
+  if (!cm || !pal)
+    return;
+  for (row = 0; row < 32; ++row)
+  {
+    double f = bg_RowFade(row);
+
+    if (f >= 1.0)
+      continue;
+    for (i = 0; i < 255; ++i)
+    {
+      const byte* d = pal + 3 * (int) cm[row * 256 + i];
+      int r = (int) (d[0] * f + 0.5), g = (int) (d[1] * f + 0.5), b = (int) (d[2] * f + 0.5), best = 0;
+      long bd = 1L << 30;
+
+      for (j = 0; j < 255; ++j)
+      {
+        long dr = pal[j * 3] - r, dg = pal[j * 3 + 1] - g, db = pal[j * 3 + 2] - b;
+        long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+
+        if (dd < bd)
+        {
+          bd = dd;
+          best = j;
+        }
+      }
+      cm[row * 256 + i] = (byte) best;
+    }
   }
 }
 

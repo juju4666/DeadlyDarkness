@@ -164,17 +164,23 @@ class Palette:
         self.rgb = [tuple(data[i * 3:i * 3 + 3]) for i in range(256)]
         self.cache = {}
 
-    def index(self, c):
-        i = self.cache.get(c)
+    def index(self, c, glow=True):
+        """palette index nearest to colour c. glow=False (walls and floors): an exact colour of the glow range (240-254)
+        still gives that glow index, but a merely near one never does: glow colours shine at every light level, so an
+        approximate match would make a speck of the texture glow in the dark.  Index 255 (the spare) is never used."""
+        key = c if glow else (c, 'noglow')
+        i = self.cache.get(key)
         if i is None:
             best = None
             for k, p in enumerate(self.rgb):
+                if k == 255 or (not glow and k >= 240 and p != tuple(c)):
+                    continue
                 dd = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2
                 if best is None or dd < best:
                     best, i = dd, k
                     if dd == 0:
                         break
-            self.cache[c] = i
+            self.cache[key] = i
         return i
 
 
@@ -204,7 +210,7 @@ def _post(out, top, run, prev):
             raise Error("cannot place a post at row %d" % top)
 
 
-def encode_patch(pngdata, pal, name):
+def encode_patch(pngdata, pal, name, glow=True):
     img = Image.open(io.BytesIO(pngdata)).convert('RGBA')
     w, h = img.size
     if h > 1024 or w > 2048:
@@ -223,7 +229,7 @@ def encode_patch(pngdata, pal, name):
             y0 = y
             run = bytearray()
             while y < h and px[x, y][3] >= 128 and len(run) < 254:
-                run.append(pal.index(px[x, y][:3]))
+                run.append(pal.index(px[x, y][:3], glow))
                 y += 1
             prev = _post(out, y0, run, prev)
         out.append(255)
@@ -246,12 +252,12 @@ def decode_flat(b, pal):
     return img
 
 
-def encode_flat(pngdata, pal, name):
+def encode_flat(pngdata, pal, name, glow=False):
     img = Image.open(io.BytesIO(pngdata)).convert('RGB')
     if img.size not in FLAT_SIZES.values():
         raise Error("%s: a flat must be 64x64, 64x128, 128x128 or 256x256, this one is %dx%d" % ((name,) + img.size))
     d = img.tobytes()
-    return bytes(pal.index((d[i], d[i + 1], d[i + 2])) for i in range(0, len(d), 3))
+    return bytes(pal.index((d[i], d[i + 1], d[i + 2]), glow) for i in range(0, len(d), 3))
 
 
 def decode_sound(b):
@@ -470,14 +476,14 @@ class Tree:
                 nm, ext = self.lumpfor(p)
                 add(group, nm, open(p, 'rb').read(), p)
 
-        def pictures(group, flats=False):
+        def pictures(group, flats=False, glow=True):
             out = []
             for p in self.files(group):
                 nm, ext = self.lumpfor(p)
                 data = open(p, 'rb').read()
                 try:
                     if ext == '.png':
-                        data = encode_flat(data, pal, self.rel(p)) if flats else encode_patch(data, pal, self.rel(p))
+                        data = encode_flat(data, pal, self.rel(p)) if flats else encode_patch(data, pal, self.rel(p), glow)
                 except Error as e:
                     self.errors.append(str(e))
                     continue
@@ -519,8 +525,8 @@ class Tree:
         self.check_sprites([n for n, _ in sprites])
         # patches + wall textures
         lumps.append(('P_START', b''))
-        patches = pictures('patches')
-        texs = pictures('textures')
+        patches = pictures('patches', glow=False)    # (walls and floors do not glow unless a colour is exactly a glow colour)
+        texs = pictures('textures', glow=False)
         lumps.append(('P_END', b''))
         lumps.append(('F_START', b''))
         pictures('flats', flats=True)

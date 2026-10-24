@@ -73,10 +73,13 @@ Every light thing has five args. 0 means "use the definition's own value".
 Colour args all 0 keeps the definition's colour. Only the proportions matter (255 0 0 and 128 0 0 are the same
 red). Strength above 100 is allowed but light is capped just below full bright.
 
+Sector light 0 is pitch black: the darkest shades fade to true black, so only lights (and the lantern's short reach) show anything there.
+
 ## Things that light up by themselves
 
 * **Player lantern**: a dim candle-coloured light on every player (the Dark-Souls-style carried light). Menu:
-  "Player Lantern".
+  "Player Lantern". Default `radius 150 strength 0.7`: it only lights what is within about a sword's reach, so a
+  sector at light 0 stays dark beyond that. Raise it with the `lantern` command in BGLIGHT if you want more.
 * **Projectiles**: every projectile in flight glows in the colour of its own sprite.
 * **Explosions**: a projectile that hits glows brighter and wider, fading over its death frames.
 * **Power-ups**: a soul sphere, mega sphere, invulnerability, berserk, radiation suit, computer map or light

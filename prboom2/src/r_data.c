@@ -420,6 +420,26 @@ static void R_InitColormaps(void)
   colormaps[0] = (const lighttable_t *)colormap_lump;
   for (i=1; i<numcolormaps; i++)
     colormaps[i] = (const lighttable_t *)W_LumpByNum(i+firstcolormaplump);
+  {
+    // Begotten: private copies whose darkest rows fade to black (a sector at light 0 is pitch black)
+    const byte* pal = W_LumpByName("PLAYPAL");
+    int len;
+
+    for (i=0; i<numcolormaps; i++)
+    {
+      len = W_LumpLength(i == 0 ? W_GetNumForName("COLORMAP") : i+firstcolormaplump);
+      if (len >= 32 * 256)
+      {
+        byte* copy = Z_Malloc(len);
+
+        memcpy(copy, colormaps[i], len);
+        bg_FadeColormap(copy, pal);
+        colormaps[i] = (const lighttable_t *)copy;
+        if (i == 0)
+          colormap_lump = copy;
+      }
+    }
+  }
   // cph - always lock
 }
 

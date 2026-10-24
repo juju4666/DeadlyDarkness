@@ -16,6 +16,8 @@
 #include "g_game.h"
 #include "lprintf.h"
 #include "m_menu.h"
+#include "hu_stuff.h"
+#include "dsda/pause.h"
 #include "p_mobj.h"
 #include "v_video.h"
 
@@ -407,6 +409,10 @@ void bg_SplitDrawHud(int v)
   if (!p->mo)
     return;
   bg_SplitRect(v, &x, &y, &w, &h);
+
+  // every view has its own crosshair in the middle of it
+  if (HU_CrosshairEnabled() && !automap_full && !menuactive && !dsda_Paused() && p->playerstate != PST_DEAD)
+    HU_DrawCrosshairAt(x + w / 2, y + h / 2, p->health);
 
   // test aid (BEGOTTEN_TESTFLASH=1): the first local player is always flashing red
   if (v == 0 && getenv("BEGOTTEN_TESTFLASH"))

@@ -58,6 +58,7 @@
 
 #include "dsda.h"
 #include "dsda/exhud.h"
+#include "dsda/bgsplit.h"
 #include "dsda/map_format.h"
 #include "dsda/mapinfo.h"
 #include "dsda/messenger.h"
@@ -228,12 +229,29 @@ mobj_t *HU_Target(void)
   return linetarget;
 }
 
+// Begotten split-screen: one crosshair in the middle of each player's view, in the colour of that player's health
+void HU_DrawCrosshairAt(int cx, int cy, int health)
+{
+  int cm;
+
+  if (!hudadd_crosshair || !crosshair_nam[hudadd_crosshair] || crosshair.lump == -1)
+    return;
+  cm = hudadd_crosshair_health ? ST_HealthColor(health) : dsda_IntConfig(dsda_config_hudadd_crosshair_color);
+  if (!hudadd_crosshair_scale)
+    V_DrawNumPatch(cx - crosshair.w / 2, cy - crosshair.h / 2, 0, crosshair.lump, cm, crosshair.flags);
+  else
+    V_DrawNumPatch(cx * 320 / SCREENWIDTH - crosshair.w / 2, cy * 200 / SCREENHEIGHT - crosshair.h / 2, 0, crosshair.lump, cm,
+                   crosshair.flags);
+}
+
 void HU_DrawCrosshair(void)
 {
   int cm;
 
   if (!hudadd_crosshair)
     return;
+  if (bg_ViewCount() > 0)
+    return;                // split-screen: every view has its own (bg_SplitDrawHud)
 
   crosshair.target_sprite = -1;
 
