@@ -698,6 +698,13 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 
 
+## 0.10.55 - fog is lit like everything else
+
+* The fog colour used to be added at full strength whatever the light, so in a dark room the far surfaces faded to a blue-grey brighter than the near ones (the haze glowed by itself). Now the haze colour is scaled by the sector's light level: `am = dark + (1 - dark) * lightlevel / 255` (`bg_level_t.am`, a 4-bit step in the fog key, bits 36-39; `bg_FogTable` uses `zc * amb`). The lights' own scattering (`scatter`, `lv`) is unchanged. New fog option `dark F` (default 0.1; 1 = the old behaviour).
+* The sector light is the sector's `lightlevel`, not the distance-dimmed colormap row (that one would also darken the haze with distance, which is the opposite of fog). Walls use their sector, flats the plane's light (`bg_LightSetPlane(height, lightlevel)`), sprites their sector.
+* Tested here: a dark room (light 24) with fog and a red lamp, before and after: the far wall goes to near black; a lit room (light 192): about the same as before.
+* Fog colours chosen for a dark map now show less. Set `dark 1` on a fog line to get the old look back.
+
 ## 0.10.54 - dark colours no longer go grey or green
 
 * Every coloured light and every fog table matches a computed colour back to the palette through a lookup cube (`nearest_cube`). Two faults showed in the dark: the cube had 32 cells of 8 units a side, so dark colours (all channels under about 40) collapsed into a few cells and lost their hue (grey); and the search covered index 255, the spare dark green of every theme (12 40 22 in the crow palette), which about one in six dark cells picked (green). Now: 40 cells a side with edges at 255 * (l/40)^2 (about 3 units wide near black, 13 near white; `cube_q`, `BG_CUBE_AT`, `bg_Nearest`), and index 255 is never handed out. All four users (tint tables, fog tables, halos, weather) go through `bg_Nearest`.

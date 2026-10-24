@@ -234,6 +234,7 @@ fog map MAP01 color 34 40 54 density 0.0018 scatter 0.9 max 0.97
 | `color`   | haze colour, R G B 0-255                                                                    | 40 46 58           |
 | `density` | thickness per map unit; the haze is 63% thick at 1/density units (0.0018 is about 550 units) | 0.0012             |
 | `scatter` | how much the lights light the haze itself, 0 (none) to 1                                    | 0.8                |
+| `dark`    | how much of the haze's colour is left in a pitch-black sector, 0 to 1: the haze is lit like everything else, so a dark room's far wall fades to black, not to a glowing blue (1 = the old behaviour, a haze that shines by itself) | 0.1 |
 | `max`     | the thickest the haze ever gets (0-1); lower keeps far walls readable                       | 0.97               |
 
 **Fog in parts of a level.** Add `sector TAG` and the line applies to the sectors with that tag, instead of the whole level:

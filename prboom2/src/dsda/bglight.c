@@ -197,7 +197,7 @@ static bg_lightdef_t dyn_muzzle = { 0, "muzzle", BGL_POINT, 340, 0.9, 0, false, 
 #define BG_MAXFOGS 16
 #define BG_FOG_STEPS 12
 #define BG_FOG_LIGHT_STEPS 7              // how much light the fog gets, in steps
-typedef struct { char map[9]; int tag; double col[3], density, scatter, max; } bg_fogdef_t;   // tag -1: the level's own
+typedef struct { char map[9]; int tag; double col[3], density, scatter, max, dark; } bg_fogdef_t;   // tag -1: the level's own
 static bg_fogdef_t fogdefs[BG_MAXFOGS];
 static int num_fogdefs;
 static dboolean fog_active;                    // this level has fog
@@ -206,7 +206,7 @@ static dboolean fog_on;                        // fog is on in this frame (level
 #define BG_FOGZONES 16
 #define BG_FOG_LUT 2048
 #define BG_FOG_LUT_STEP 4.0                // map units between table entries
-typedef struct { double col[3], density, scatter, max; double lut[BG_FOG_LUT + 1]; } bg_fogzone_t;
+typedef struct { double col[3], density, scatter, max, dark; double lut[BG_FOG_LUT + 1]; } bg_fogzone_t;
 static bg_fogzone_t fogz[BG_FOGZONES];
 static int num_fogz = 1;                       // zones in use, counting the empty zone 0
 static unsigned char* sector_zone;             // the zone of each sector
@@ -459,7 +459,7 @@ static void bg_ParseLightText(const char* text_in)
 
       memset(&f, 0, sizeof f);
       f.col[0] = 40; f.col[1] = 46; f.col[2] = 58;
-      f.density = 0.0012; f.scatter = 0.8; f.max = 0.97;
+      f.density = 0.0012; f.scatter = 0.8; f.max = 0.97; f.dark = 0.1;
       f.tag = -1;
       while ((w = strtok_r(NULL, " \t\r", &save)))
       {
@@ -477,11 +477,14 @@ static void bg_ParseLightText(const char* text_in)
         else if (!strcasecmp(w, "density") && (v = strtok_r(NULL, " \t\r", &save))) f.density = atof(v);
         else if (!strcasecmp(w, "scatter") && (v = strtok_r(NULL, " \t\r", &save))) f.scatter = atof(v);
         else if (!strcasecmp(w, "max") && (v = strtok_r(NULL, " \t\r", &save))) f.max = atof(v);
+        else if (!strcasecmp(w, "dark") && (v = strtok_r(NULL, " \t\r", &save))) f.dark = atof(v);
       }
       for (i = 0; i < 3; ++i)
         f.col[i] = f.col[i] < 0 ? 0 : f.col[i] > 255 ? 255 : f.col[i];
       if (f.max < 0) f.max = 0;
       if (f.max > 1) f.max = 1;
+      if (f.dark < 0) f.dark = 0;
+      if (f.dark > 1) f.dark = 1;
       for (i = 0; i < num_fogdefs; ++i)
         if (!strcasecmp(fogdefs[i].map, f.map) && fogdefs[i].tag == f.tag)
           break;
@@ -1569,6 +1572,7 @@ static void bg_FogZonesBuild(const char* name)
       fogz[z].density = f->density;
       fogz[z].scatter = f->scatter;
       fogz[z].max = f->max;
+      fogz[z].dark = f->dark;
     }
   num_fogz = n;
   free(sector_zone);
@@ -2726,6 +2730,7 @@ typedef struct
   double ff;                 // fog fraction 0..1 (0: none)
   double fl;                 // how much light the fog gets here, 0..1 (its colour is `field`, as for the surface)
   int fz;                    // the fog zone
+  double am;                 // how much of the haze's own colour is there: 1 in a bright sector, `dark` in a black one
 } bg_level_t;
 
 static void bg_LitLevel(bg_level_t* l, int base_row, double total, const double* col)
@@ -2738,6 +2743,7 @@ static void bg_LitLevel(bg_level_t* l, int base_row, double total, const double*
   l->ff = 0;
   l->fl = 0;
   l->fz = 0;
+  l->am = 1.0;
 }
 
 static double* inv_cos;                    // 1 / cos(angle of screen column x): ray distance = depth * inv_cos[x]
@@ -2836,7 +2842,7 @@ int bg_FogSelfTest(char* msg, size_t msglen)
 
 // the fog at a point `dist` away: how much of it, and its colour, which is the haze's own colour plus the light that
 // reaches the point (so a lamp makes the haze round it glow, in the lamp's colour)
-static void bg_FogLevel(bg_level_t* l, double dist, double total, int zone)
+static void bg_FogLevel(bg_level_t* l, double dist, double total, int zone, int lightlevel)
 {
   if (!fog_on)
     return;
@@ -2846,11 +2852,17 @@ static void bg_FogLevel(bg_level_t* l, double dist, double total, int zone)
   l->ff = bg_FogFraction(zone, dist);
   l->fz = zone;
   l->fl = fogz[zone].scatter * total > 1.0 ? 1.0 : fogz[zone].scatter * total;
+  {
+    // the haze is lit light, not a glow of its own: in a dark sector it goes dark too (down to `dark` of its colour)
+    double amb = (double) (lightlevel < 0 ? 0 : lightlevel > 255 ? 255 : lightlevel) / 255.0;
+
+    l->am = fogz[zone].dark + (1.0 - fogz[zone].dark) * amb;
+  }
 }
 
 // thr in [0,1): 0.5 rounds to nearest, an ordered-dither threshold rounds up for that share of the pixels.
 // key: bits 0-5 colormap row, 6-10 tint steps, 11-17 tint colour, 18-21 fog steps, 22-24 fog light, 25-31 its colour,
-// 32-35 fog zone
+// 32-35 fog zone, 36-39 how much of the haze colour (ambient light)
 static bg_key_t bg_LitKey(const bg_level_t* l, double thr)
 {
   int row = (int) (l->rf + thr);
@@ -2876,7 +2888,7 @@ static bg_key_t bg_LitKey(const bg_level_t* l, double thr)
       int lv = (int) (l->fl * BG_FOG_LIGHT_STEPS + thr);
 
       lv = lv > BG_FOG_LIGHT_STEPS ? BG_FOG_LIGHT_STEPS : lv;
-      key |= (bg_key_t) fs << 18 | (bg_key_t) l->fz << 32;
+      key |= (bg_key_t) fs << 18 | (bg_key_t) l->fz << 32 | (bg_key_t) (int) (l->am * 15.0 + 0.5) << 36;
       if (lv > 0)
         key |= (bg_key_t) lv << 22 | (bg_key_t) l->field << 25;
     }
@@ -2928,6 +2940,7 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
   {
     const double* zc = fogz[(key >> 32) & 15].col;
     double lv = (double) ((key >> 22) & 7) / (double) BG_FOG_LIGHT_STEPS;
+    double amb = (double) ((key >> 36) & 15) / 15.0;
     int field = (int) ((key >> 25) & 127);
     double tc[3] = { 1, 1, 1 };
 
@@ -2939,7 +2952,7 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
     }
     for (i = 0; i < 3; ++i)
     {
-      fc[i] = zc[i] + lv * 255.0 * tc[i];
+      fc[i] = zc[i] * amb + lv * 255.0 * tc[i];
       if (fc[i] > 255.0)
         fc[i] = 255.0;
     }
@@ -3102,6 +3115,7 @@ static void bg_RunPiece(bg_runs_t* r, int a, const bg_level_t* la, int b, const 
     l.field = t < 0.5 ? la->field : lb->field;
     l.ff = la->ff + (lb->ff - la->ff) * t;
     l.fl = la->fl + (lb->fl - la->fl) * t;
+    l.am = la->am + (lb->am - la->am) * t;
     l.fz = t < 0.5 ? la->fz : lb->fz;
     if (r->dither)
       thr = r->vertical ? bg_Bayer(r->fixed, p) : bg_Bayer(p, r->fixed);
@@ -3183,6 +3197,7 @@ typedef struct
   R_DrawColumn_f f;
   draw_column_vars_t* d;
   int base_row;
+  int light;                        // the sector's light level (for the haze)
   double px, py, scale, dist;
   int zone;
   int count;
@@ -3210,7 +3225,7 @@ static void bg_ColLevel(void* c, int y, bg_level_t* out)
   }
   total = bg_AccDone(&a, col);
   bg_LitLevel(out, k->base_row, total, col);
-  bg_FogLevel(out, k->dist, total, k->zone);
+  bg_FogLevel(out, k->dist, total, k->zone, k->light);
 }
 
 static void bg_ColDraw(void* c, int y1, int y2, bg_key_t row)
@@ -3234,6 +3249,7 @@ void bg_LitColumn(R_DrawColumn_f colfunc, draw_column_vars_t* d, fixed_t scale)
   k.base_row = bg_BaseRow(cm);
   k.count = 0;
   k.nb = 0;
+  k.light = sectors[wall.sector].lightlevel;
   if (k.base_row < 0 || (wall.count == 0 && !wall.lay && !fog_on) || scale <= 0 || yh < yl)
   {
     colfunc(d);
@@ -3246,7 +3262,7 @@ void bg_LitColumn(R_DrawColumn_f colfunc, draw_column_vars_t* d, fixed_t scale)
     bg_level_t lv;
 
     bg_LitLevel(&lv, k.base_row, 0.0, white);
-    bg_FogLevel(&lv, bg_Fix(projectiony) / bg_Fix(scale) * inv_cos[d->x], 0.0, sector_zone[wall.sector]);
+    bg_FogLevel(&lv, bg_Fix(projectiony) / bg_Fix(scale) * inv_cos[d->x], 0.0, sector_zone[wall.sector], sectors[wall.sector].lightlevel);
     d->colormap = bg_KeyColormap(bg_LitKey(&lv, 0.5));
     colfunc(d);
     d->colormap = cm;
@@ -3329,9 +3345,11 @@ void bg_SetMaskedScale(fixed_t scale)
 
 static double plane_z, plane_n[3];
 static fixed_t plane_height;
+static int plane_light;
 
-void bg_LightSetPlane(fixed_t height)
+void bg_LightSetPlane(fixed_t height, int lightlevel)
 {
+  plane_light = lightlevel;
   plane_height = height;
   plane_z = bg_Fix(height);
   plane_n[0] = plane_n[1] = 0;
@@ -3342,6 +3360,7 @@ typedef struct
 {
   draw_span_vars_t* ds;
   int base_row;
+  int light;                        // the plane's light level (for the haze)
   double depth;
   int count;
   int set[BG_MAXLIGHTS];
@@ -3399,7 +3418,7 @@ static void bg_SpanLevel(void* c, int x, bg_level_t* out)
       else
         zone = num_fogz > 1 ? sector_zone_default : 0;
     }
-    bg_FogLevel(out, r, total, zone);
+    bg_FogLevel(out, r, total, zone, k->light);
   }
 }
 
@@ -3428,6 +3447,7 @@ dboolean bg_LitSpan(draw_span_vars_t* ds)
   if (!frame_active || fixedcolormap || ds->x2 < ds->x1)
     return false;
   k.base_row = bg_BaseRow(ds->colormap);
+  k.light = plane_light;
   if (k.base_row < 0 || ds->z <= 0)
     return false;
   depth = bg_Fix(ds->z);
@@ -3521,7 +3541,7 @@ const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixe
     bg_level_t lv;
 
     bg_LitLevel(&lv, base_row, total, col);
-    bg_FogLevel(&lv, sprite_dist, total, fog_on ? sector_zone[s] : 0);
+    bg_FogLevel(&lv, sprite_dist, total, fog_on ? sector_zone[s] : 0, sector->lightlevel);
     return bg_KeyColormap(bg_LitKey(&lv, 0.5));
   }
 }

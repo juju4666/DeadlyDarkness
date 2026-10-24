@@ -789,7 +789,7 @@ static void R_DoDrawPlane(visplane_t *pl)
 
       stop = pl->maxx + 1;
       dsvars.planezlight = zlight[light];
-      bg_LightSetPlane(pl->height);
+      bg_LightSetPlane(pl->height, pl->lightlevel);
       pl->top[pl->minx-1] = pl->top[stop] = SHRT_MAX; // dropoff overflow
 
       for (x = pl->minx ; x <= stop ; x++)

@@ -30,7 +30,7 @@ void bg_SetMaskedScale(fixed_t scale);
 
 // Floors and ceilings. SetPlane before the spans of a visplane (height in map units, fixed); LitSpan draws the span
 // in pieces and returns true, or returns false when no light reaches it (the caller then draws it as usual).
-void bg_LightSetPlane(fixed_t height);
+void bg_LightSetPlane(fixed_t height, int lightlevel);
 dboolean bg_LitSpan(draw_span_vars_t* dsvars);
 
 // Sprites: the colormap a thing at this spot should use.
