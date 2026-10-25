@@ -166,9 +166,9 @@ static const char bg_default_lights[] =
   "# (negative turns the other way; a placed gyro's first argument sets it, in tens of degrees per second); `glow RADIUS STRENGTH`\n"
   "# adds a small round light at the lamp itself; the thing's angle is where the beam points at the start, so two things 180 degrees apart\n"
   "# make the two-beam kind. Thing_Deactivate / Thing_Activate (or the editor's Dormant flag) switch it off and on.\n"
-  "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 12 30 pitch -45 color red   spin 480 glow 320 0.25\n"
-  "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 12 30 pitch -45 color amber spin 480 glow 320 0.25\n"
-  "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 12 30 pitch -45 color blue  spin 480 glow 320 0.25\n"
+  "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color red   spin 480 glow 256 0.25\n"
+  "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color amber spin 480 glow 256 0.25\n"
+  "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color blue  spin 480 glow 256 0.25\n"
   "lantern radius 150 strength 0.7 height 52 color candle\n"
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
@@ -3691,7 +3691,7 @@ static double bg_FlareFactor(const bg_light_t* L)
   if (d < 1.0)
     return 1.0;
   c = (L->dir[0] * mx + L->dir[1] * my + L->dir[2] * mz) / d;   // cosine of the angle between the beam and the viewer
-  c = (c - 0.766) / (0.99 - 0.766);                              // 0 at 40 degrees off the beam, 1 at 8
+  c = (c - 0.643) / (0.99 - 0.643);                              // 0 at 50 degrees off the beam, 1 at 8
   return c < 0 ? 0 : c > 1.0 ? 1.0 : c * c * (3.0 - 2.0 * c);
 }
 
