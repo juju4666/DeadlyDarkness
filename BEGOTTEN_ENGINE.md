@@ -817,3 +817,8 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 ## 0.10.67
 
 - Light bounce no longer fills shadows: the spilled light of a sector is measured from the light that lit it, and a floor, wall or ceiling point that this light cannot see (a wall, ledge, pillar or solid thing in the way) gets none of it. Before, the whole sector was washed evenly, so the shadow of a wall on the floor was filled in with colour.
+
+## 0.10.68
+
+- Flying projectiles and the flash of the player's gun now cast shadows (rays to every lit point, like the flashlight and the gyros). A menu option "Projectile And Gun Flash Shadows" and the BGLIGHT words `missile noshadow` / `muzzle noshadow` turn them off. If the muzzle point (28 units ahead of the eye) is inside a wall, the flash comes from the eye instead, so it still lights the room.
+- Explosions (the light a projectile makes when it hits something) are 75% smaller: radius 420 -> 105, halo 80 -> 20. They do not cast shadows.

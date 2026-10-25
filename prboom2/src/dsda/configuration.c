@@ -1024,6 +1024,10 @@ dsda_config_t dsda_config[dsda_config_count] = {
     "begotten_flashlight_shadows", dsda_config_begotten_flashlight_shadows,
     CONF_BOOL(1), NULL, NOT_STRICT
   },
+  [dsda_config_begotten_effect_shadows] = {
+    "begotten_effect_shadows", dsda_config_begotten_effect_shadows,
+    CONF_BOOL(1), NULL, NOT_STRICT
+  },
   [dsda_config_begotten_thing_shadows] = {
     "begotten_thing_shadows", dsda_config_begotten_thing_shadows,
     CONF_BOOL(1), NULL, NOT_STRICT

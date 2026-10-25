@@ -180,7 +180,7 @@ static const char bg_default_lights[] =
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
   "missile radius 230 strength 0.85 halo 28 corona 9 color auto\n"
-  "explosion radius 420 strength 1.0 halo 80 color auto\n"
+  "explosion radius 105 strength 1.0 halo 20 color auto\n"
   "muzzle radius 340 strength 0.9 height 0 color warm\n"
   "# power-ups on the floor glow (slow pulse) in the colour of their sprite, until they are picked up\n"
   "powerup radius 220 strength 0.8 height 24 halo 26 color auto\n"
@@ -194,7 +194,7 @@ static int num_defs;
 static int first_type = -1;
 static bg_lightdef_t lantern = { 0, "lantern", BGL_POINT, 150, 0.7, 52, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1 };
 static bg_lightdef_t dyn_missile = { 0, "missile", BGL_POINT, 230, 0.85, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1 };
-static bg_lightdef_t dyn_explosion = { 0, "explosion", BGL_POINT, 420, 1.0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1 };
+static bg_lightdef_t dyn_explosion = { 0, "explosion", BGL_POINT, 105, 1.0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1 };
 static bg_lightdef_t dyn_powerup = { 0, "powerup", BGL_POINT, 220, 0.8, 24, false, 0, 0, 0, 0, 2, 0, 0.3, 2.0, -1, -1 };
 static bg_lightdef_t dyn_puff = { 0, "puff", BGL_POINT, 120, 0.75, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1 };
 static bg_lightdef_t dyn_flashlight = { 0, "flashlight", BGL_SPOT, 760, 1.0, 41, false, 0, 13, 32, 0, 0, 0, 0, 0, 0, -1 };
@@ -639,6 +639,8 @@ void bg_LightsInit(void)
   num_weatherdefs = 0;
   thing_shadows_on = true;
   dyn_flashlight.shadow = true;
+  dyn_missile.shadow = true;     // flying projectiles and the flash of a gun cast shadows too (menu option, or BGLIGHT `missile noshadow`)
+  dyn_muzzle.shadow = true;
   dyn_flashlight.side = 10;
   dyn_flashlight.drop = 8;   // the player's flashlight casts shadows (BGLIGHT `flashlight noshadow`, or the menu option, turns it off)
   bg_ParseLightText(bg_default_lights);
@@ -1022,6 +1024,7 @@ static void bg_AddDynamicLights(void)
       continue;
     tmp = *d;
     tmp.strength *= fade;
+    tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_effect_shadows) && !getenv("BGLIGHT_NOSHADOW");
     bg_MobjPos(mo, &x, &y, &z);
     if (d == &dyn_puff)
     {
@@ -1039,13 +1042,20 @@ static void bg_AddDynamicLights(void)
   for (i = 0; i < MAX_MAXPLAYERS; ++i)
   {
     const mobj_t* pm;
-    double x, y, z, a;
+    double x, y, z, a, mx, my;
+    bg_lightdef_t tmp;
 
     if (!playeringame[i] || !(pm = players[i].mo) || pm->health <= 0 || !players[i].psprites[ps_flash].state)
       continue;
     bg_MobjPos(pm, &x, &y, &z);
     a = (double) pm->angle * (2.0 * M_PI / 4294967296.0);
-    bg_AddLight(&dyn_muzzle, pm, x + 28.0 * cos(a), y + 28.0 * sin(a), z + 40.0 + dyn_muzzle.height, 0, 0, NULL);
+    tmp = dyn_muzzle;
+    tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_effect_shadows) && !getenv("BGLIGHT_NOSHADOW");
+    mx = x + 28.0 * cos(a);
+    my = y + 28.0 * sin(a);
+    if (tmp.shadow && !bg_ClearPath(x, y, z + 40.0, mx, my, z + 40.0))
+      mx = x, my = y;                  // against a wall: the flash would be inside it and light nothing, so it comes from the eye
+    bg_AddLight(&tmp, pm, mx, my, z + 40.0 + dyn_muzzle.height, 0, 0, NULL);
   }
 
   // the flashlight: the light amplification pickup, a cone along the view; it blinks for its last seconds
