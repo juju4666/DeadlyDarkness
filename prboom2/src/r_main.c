@@ -1064,9 +1064,9 @@ static void R_InitDrawScene(void)
       gld_StartDrawScene();
     }
   } else {
-    if (dsda_IntConfig(dsda_config_flashing_hom))
+    if (dsda_IntConfig(dsda_config_flashing_hom) || getenv("BEGOTTEN_HOM"))
     { // killough 2/10/98: add flashing red HOM indicators
-      unsigned char color=(gametic % 20) < 9 ? 0xb0 : 0;
+      unsigned char color=(getenv("BEGOTTEN_HOM") || (gametic % 20) < 9) ? 0xb0 : 0;
       V_FillRect(0, 0, 0, viewwidth, viewheight, color);
       R_DrawViewBorder();
     }

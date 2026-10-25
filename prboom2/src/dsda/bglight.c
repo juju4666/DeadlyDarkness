@@ -1529,10 +1529,17 @@ void bg_FadeColormap(byte* cm, const byte* pal)
       int r = (int) (d[0] * f + 0.5), g = (int) (d[1] * f + 0.5), b = (int) (d[2] * f + 0.5), best = 0;
       long bd = 1L << 30;
 
+      // too dark to tell apart: true black (otherwise the darkest bluish palette colour wins for every dark hue and
+      // far walls turn into flat dark-blue panels)
+      if (r < 14 && g < 14 && b < 14)
+      {
+        cm[row * 256 + i] = 0;
+        continue;
+      }
       for (j = 0; j < 255; ++j)
       {
         long dr = pal[j * 3] - r, dg = pal[j * 3 + 1] - g, db = pal[j * 3 + 2] - b;
-        long dd = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        long dd = dr * dr + dg * dg + db * db;   // plain distance: keeps the hue of what is faded
 
         if (dd < bd)
         {

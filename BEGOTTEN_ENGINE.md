@@ -781,3 +781,7 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 ## 0.10.58 - Hexen lightning off
 * A MAPINFO `lightning` line made sky sectors flash and swapped the sky (`P_InitLightning`). Begotten has its own weather, so that Hexen lightning is now ignored unless the env var `BEGOTTEN_HEXEN_LIGHTNING=1` is set. Rain/snow/thunder come only from BGLIGHT `weather` lines and the "Rain, Snow And Lightning" menu option.
+
+## 0.10.59 - the dark fade keeps no blue residue
+* The fade of the darkest colormap rows (0.10.57) matched dark results with a colour weighting that makes blue errors cheap, so dark browns and reds at distance snapped to the darkest bluish palette colour (index 159) and showed as flat dark-blue panels. Now: a result under 14 in every channel is index 0 (black), and the matching uses plain distance. Rows 28-31 are black for practically every colour.
+* `BEGOTTEN_HOM=1` (developer aid): fills the 3D view with red before drawing, so any pixel the renderer does not draw shows up (hall of mirrors).
