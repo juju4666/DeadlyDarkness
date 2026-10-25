@@ -792,3 +792,6 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 ## 0.10.61 - gyro lights, second pass
 * Beam tilt -30 degrees (was -45); the cone is wider (`spot 18 42`, was 12 30); the lamp's point light is 20% smaller (`glow 256 0.25`, was radius 320). The corona flashes within 50 degrees of the beam.
+
+## 0.10.62 - gyro reach
+* With the beam tilted -30 degrees and the lamp near a 288-high ceiling, the beam's axis met the floor about 460 units away, at the very edge of the 480 radius, and the floor directly below was outside the cone: walls lit, floor dark. Gyro radius is now 720 (`light 2030x ... radius 720 strength 1.7`). Rooms with high ceilings can raise it further with the placed light's own radius.
