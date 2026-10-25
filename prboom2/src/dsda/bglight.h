@@ -69,4 +69,6 @@ int bg_LightLosSelfTest(char* msg, size_t msglen);   // shadow rays on made-up g
 
 void bg_FadeColormap(byte* cm, const byte* pal);   // darkest colormap rows fade to black (call on a private copy)
 
+dboolean bg_IsLightEdNum(int ednum);   // is this editor number one of the placeable lights?
+
 #endif

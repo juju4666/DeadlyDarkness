@@ -1107,6 +1107,7 @@ static void b_shocktrooper(spec_t* sp)
   int a1 = CL(S_SSWV_ATK1), a2 = CL(S_SSWV_ATK2);
   int last = a2, s;
 
+  info->firerange = V(sp->key, "firerange", 640);   // walks up to this close before it starts shooting
   states[a1].tics = V(sp->key, "windup", 14);
   states[a2].tics = 6;
   states[a2].nextstate = 0;

@@ -6586,6 +6586,10 @@ typedef struct
   // misc
   int bloodcolor;
   int visibility;
+
+  // Begotten: a monster with a range keeps walking toward its target until it is this close (map units) before it
+  // starts a ranged attack. 0 = no limit.
+  int firerange;
 } mobjinfo_t;
 
 #define NO_ALTSPEED -1

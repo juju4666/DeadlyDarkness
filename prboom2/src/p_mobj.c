@@ -37,6 +37,7 @@
 #include "r_main.h"
 #include "p_maputl.h"
 #include "p_map.h"
+#include "dsda/bglight.h"
 #include "dsda/begotten.h"
 #include "dsda/bgroster.h"
 #include "dsda/bgclass.h"
@@ -2584,7 +2585,8 @@ mobj_t* P_SpawnMapThing (const mapthing_t* mthing, int index)
     }
   }
 
-  if (!P_ShouldSpawnMapThing(options))
+  // Begotten: placed lights ignore the skill / class / game-mode tick boxes (a pasted copy with other flags still lights)
+  if (!bg_IsLightEdNum(thingtype) && !P_ShouldSpawnMapThing(options))
     return NULL;
 
   if (!raven && thingtype >= 14001 && thingtype <= 14064)

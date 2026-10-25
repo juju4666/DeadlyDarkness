@@ -672,6 +672,16 @@ void bg_LightsInit(void)
   lprintf(LO_INFO, "bg_LightsInit: %d light things\n", num_defs);
 }
 
+dboolean bg_IsLightEdNum(int ednum)
+{
+  int i;
+
+  for (i = 0; i < num_defs; ++i)
+    if (defs[i].doomednum == ednum)
+      return true;
+  return false;
+}
+
 static const bg_lightdef_t* bg_DefForType(int type)
 {
   int i;

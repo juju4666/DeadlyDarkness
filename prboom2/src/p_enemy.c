@@ -245,6 +245,11 @@ static dboolean P_CheckMissileRange(mobj_t *actor)
   if (actor->reactiontime)
     return false;       // do not attack yet
 
+  // Begotten: too far for this monster's shots: keep chasing (A_Chase walks on when this says no)
+  if (actor->info->firerange > 0 &&
+      (P_AproxDistance(actor->x - actor->target->x, actor->y - actor->target->y) >> FRACBITS) > actor->info->firerange)
+    return false;
+
   // OPTIMIZE: get this from a global checksight
   dist = P_AproxDistance ( actor->x-actor->target->x,
                            actor->y-actor->target->y) - 64*FRACUNIT;

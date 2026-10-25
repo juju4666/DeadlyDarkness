@@ -36,3 +36,13 @@ Saving can crash UDB in its "building map nodes" step (Wine's Mono cannot wait f
 already written when that happens.  Build the nodes outside UDB instead:   python3 tools/bgnodes.py MAP.wad
 (uses the Linux zdbsp from the Compilers.zip; --zdbsp PATH or $ZDBSP if it is elsewhere).  Installing real .NET 4.8 into the
 Wine prefix (winetricks dotnet48) in place of Wine-Mono may also cure the crashes; not tested.
+
+Testing without saving first
+----------------------------
+UDB's Test button writes the map you are editing, saved or not, into a temporary wad and builds its nodes (the
+"zdbsp_normal" test compiler of this config).  The parameter %F is that temporary wad.  So put %F in the test
+parameters instead of the name of your saved file (a name like map01.wad is the OLD file on disk, which is why the map had to be saved first):
+
+  -iwad "C:\path\to\begotten.wad" -file "C:\path\to\begotten-data.wad" "%F" -warp %L -skill 4
+
+(Preferences -> Game Configurations -> Testing; use your own folder.  Keep the quotes round %F.)

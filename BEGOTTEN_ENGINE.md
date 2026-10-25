@@ -798,3 +798,8 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 ## 0.10.63 - gyro lights cast shadows
 * The gyro lights (20301-20303) and the point light at their lamp now carry the `shadow` flag, so walls, ledges, steps and doors block the beam the way they block the flashlight (the "Flashlight Shadows" menu option switches all shadow rays off). Before, only the flashlight cast shadows, and a ledge in front of a wall did not shade it.
+
+## 0.10.64 - shock trooper approaches, lights ignore spawn flags
+* **Fire range** (new mobjinfo field `firerange`, map units; 0 = unlimited): a monster with a range keeps chasing its target until it is that close before it starts a ranged attack (`P_CheckMissileRange`). The shock trooper (editor no. 68, the old arachnotron slot; its art is still the chaingunner placeholder) has 640. Tune it with a BGMOBJ line `shocktrooper firerange 800`.
+* **Placed lights spawn whatever their tick boxes say**: skill, class and single/coop/deathmatch flags are ignored for the light things (`bg_IsLightEdNum` in `P_SpawnMapThing`), so a copy pasted in the editor with other flags still lights.
+* `udb/README.txt`: how to make the Test button use the unsaved map (`%F`).
