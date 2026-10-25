@@ -808,3 +808,8 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 ## 0.10.65 - spilled light (bounce), -warp MAPxx
 * **Bounce**: a light with `bounce S` (BGLIGHT; the gyros have 0.3) colours every sector it reaches. Each sector holds a coloured ambient value (`sglow`) that jumps up when the light hits a sample point of the sector (five spots on the floor, middle and ceiling, with the light's shadows) and decays by 0.9 per tic; walls, floors, ceilings and things in the sector are lit with it as one more light without a position (`bg_GlowAt`). Menu: "Light Bounce (Coloured Spill)"; env `BGLIGHT_NOBOUNCE=1` for tests. This is an approximation, not radiosity: it ignores which surface the light hit.
 * `-warp MAP01` (the lump name UDB passes as %L) now means `-warp 1`.
+
+## 0.10.66
+
+- Light bounce: a turning spot (gyro) no longer lets the room fall back to black between passes of the beam. The sector glow now also takes 60% of the light's omni reach (same shadow test), so the wash dips as the beam leaves and rises as it returns, but never goes out.
+- Several lights on one sector are combined with a "screen" blend per colour channel, `1 - prod(1 - c)`: two equal lights are brighter than one, red + blue gives purple, and the result never exceeds 1. It is not a median or an average.

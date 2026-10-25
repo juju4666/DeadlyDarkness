@@ -363,3 +363,5 @@ inside, with the sill and the lintel casting their own shadow (the wall below th
 window stay dark). Build the window as a thin sector with the sill as its floor and the lintel as its ceiling, so
 the two-sided line has an opening of the window's size. Middle textures (glass, bars) do not block light. Put the
 light in a sector on the outside, high enough to shine through (a raised terrace, or a light on a pole).
+
+Bounce with several lights: each light's contribution to a sector is `bounce * hit * colour`; contributions from different lights are screen-blended per channel (`1 - prod(1 - c)`). Spinning spots keep 60% of their omni reach as a floor so the glow pulses instead of switching off.

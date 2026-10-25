@@ -1418,13 +1418,16 @@ static double bg_Total(const int* set, int count, double px, double py, double p
 #define BG_GLOW_DECAY 0.9                    // per game tic
 static float* sglow;                         // 3 per sector: red, green, blue strength
 static struct { double x0, y0, x1, y1; }* sbox;
+static float* sglow_target;                  // this frame's value of each sector (before the fade is applied)
 static int sglow_n, sglow_tic;
 
 static void bg_GlowReset(void)
 {
   free(sglow);
+  free(sglow_target);
   free(sbox);
   sglow = NULL;
+  sglow_target = NULL;
   sbox = NULL;
   sglow_n = 0;
   glow_any = false;
@@ -1438,6 +1441,7 @@ static void bg_GlowEnsure(void)
     return;
   bg_GlowReset();
   sglow = calloc(numsectors * 3, sizeof(float));
+  sglow_target = calloc(numsectors * 3, sizeof(float));
   sbox = calloc(numsectors, sizeof(*sbox));
   for (i = 0; i < numsectors; ++i)
   {
@@ -1468,8 +1472,11 @@ static double bg_GlowHit(const bg_light_t* L, int s)
 {
   static const double fx[5] = { 0.5, 0.25, 0.75, 0.25, 0.75 }, fy[5] = { 0.5, 0.25, 0.25, 0.75, 0.75 };
   static const double up[3] = { 0, 0, 1 }, down[3] = { 0, 0, -1 };
-  double fl = bg_Fix(sectors[s].floorheight), ce = bg_Fix(sectors[s].ceilingheight), best = 0;
+  double fl = bg_Fix(sectors[s].floorheight), ce = bg_Fix(sectors[s].ceilingheight), best = 0, best_omni = 0;
+  bg_light_t Lo = *L;
   int i;
+
+  Lo.omni = true;                  // the light's reach without its cone: what a turning beam keeps lit between passes
 
   if (ce - fl < 8.0)
     return 0;
@@ -1487,14 +1494,19 @@ static double bg_GlowHit(const bg_light_t* L, int s)
     for (j = 0; j < 3; ++j)
     {
       c = bg_Contribution(L, x, y, z[j], n[j]);
-      if (c <= best)
+      if (L->shadow && c > 0 && !bg_ShadowLit(L, x, y, z[j], n[j]))
         continue;
-      if (L->shadow && !bg_ShadowLit(L, x, y, z[j], n[j]))
-        continue;
-      best = c;
+      if (c > best)
+        best = c;
+      if (L->flare)                // a turning beam
+      {
+        c = bg_Contribution(&Lo, x, y, z[j], n[j]);
+        if (c > best_omni && (!L->shadow || bg_ShadowLit(L, x, y, z[j], n[j])))
+          best_omni = c;
+      }
     }
   }
-  return best;
+  return best > 0.6 * best_omni ? best : 0.6 * best_omni;   // the wash dips between passes of the beam but never goes out
 }
 
 static void bg_GlowUpdate(void)
@@ -1520,6 +1532,9 @@ static void bg_GlowUpdate(void)
       sglow[i] = sglow[i] * f < 0.004f ? 0.0f : sglow[i] * f;
     sglow_tic = leveltime;
   }
+  // every light that reaches a sector this frame adds its colour to the sector's target ("screen" blend: two lights
+  // of one colour make it a little brighter, a red and a blue one make purple, and the sum never passes 1)
+  memset(sglow_target, 0, numsectors * 3 * sizeof(float));
   for (i = 0; i < num_lights; ++i)
   {
     const bg_light_t* L = &lights[i];
@@ -1537,10 +1552,16 @@ static void bg_GlowUpdate(void)
       if (c <= 0)
         continue;
       for (ch = 0; ch < 3; ++ch)
-        if (c * L->col[ch] > sglow[s * 3 + ch])
-          sglow[s * 3 + ch] = (float) (c * L->col[ch]);
+      {
+        float v = (float) (c * L->col[ch]), *t = &sglow_target[s * 3 + ch];
+
+        *t = 1.0f - (1.0f - *t) * (1.0f - v);
+      }
     }
   }
+  for (i = 0; i < numsectors * 3; ++i)
+    if (sglow_target[i] > sglow[i])
+      sglow[i] = sglow_target[i];
   for (i = 0; i < numsectors * 3; ++i)
     if (sglow[i] > top)
       top = sglow[i];
