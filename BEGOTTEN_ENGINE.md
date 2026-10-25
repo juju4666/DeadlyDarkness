@@ -813,3 +813,7 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 - Light bounce: a turning spot (gyro) no longer lets the room fall back to black between passes of the beam. The sector glow now also takes 60% of the light's omni reach (same shadow test), so the wash dips as the beam leaves and rises as it returns, but never goes out.
 - Several lights on one sector are combined with a "screen" blend per colour channel, `1 - prod(1 - c)`: two equal lights are brighter than one, red + blue gives purple, and the result never exceeds 1. It is not a median or an average.
+
+## 0.10.67
+
+- Light bounce no longer fills shadows: the spilled light of a sector is measured from the light that lit it, and a floor, wall or ceiling point that this light cannot see (a wall, ledge, pillar or solid thing in the way) gets none of it. Before, the whole sector was washed evenly, so the shadow of a wall on the floor was filled in with colour.

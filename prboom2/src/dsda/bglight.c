@@ -117,6 +117,7 @@ static dboolean thing_shadows_on = true;   // BGLIGHT `thingshadows off` turns t
 static dboolean bg_ClearPath(double x0, double y0, double z0, double x1, double y1, double z1);
 static void bg_GlowUpdate(void);
 static double bg_GlowAt(int sector, double* colour);
+static dboolean bg_GlowSeen(int sector, double px, double py, double pz, const double* n);
 static void bg_GlowReset(void);
 static dboolean glow_any;                    // some sector holds spilled light this frame
 
@@ -1418,6 +1419,8 @@ static double bg_Total(const int* set, int count, double px, double py, double p
 #define BG_GLOW_DECAY 0.9                    // per game tic
 static float* sglow;                         // 3 per sector: red, green, blue strength
 static struct { double x0, y0, x1, y1; }* sbox;
+static float* sglow_src;                     // 4 per sector: where the light that spilled into it is (x, y, z), and 1 if that light casts shadows
+static float* sglow_best;                    // the strongest hit of this frame, per sector
 static float* sglow_target;                  // this frame's value of each sector (before the fade is applied)
 static int sglow_n, sglow_tic;
 
@@ -1425,9 +1428,13 @@ static void bg_GlowReset(void)
 {
   free(sglow);
   free(sglow_target);
+  free(sglow_src);
+  free(sglow_best);
   free(sbox);
   sglow = NULL;
   sglow_target = NULL;
+  sglow_src = NULL;
+  sglow_best = NULL;
   sbox = NULL;
   sglow_n = 0;
   glow_any = false;
@@ -1442,6 +1449,8 @@ static void bg_GlowEnsure(void)
   bg_GlowReset();
   sglow = calloc(numsectors * 3, sizeof(float));
   sglow_target = calloc(numsectors * 3, sizeof(float));
+  sglow_src = calloc(numsectors * 4, sizeof(float));
+  sglow_best = calloc(numsectors, sizeof(float));
   sbox = calloc(numsectors, sizeof(*sbox));
   for (i = 0; i < numsectors; ++i)
   {
@@ -1535,6 +1544,7 @@ static void bg_GlowUpdate(void)
   // every light that reaches a sector this frame adds its colour to the sector's target ("screen" blend: two lights
   // of one colour make it a little brighter, a red and a blue one make purple, and the sum never passes 1)
   memset(sglow_target, 0, numsectors * 3 * sizeof(float));
+  memset(sglow_best, 0, numsectors * sizeof(float));
   for (i = 0; i < num_lights; ++i)
   {
     const bg_light_t* L = &lights[i];
@@ -1551,6 +1561,14 @@ static void bg_GlowUpdate(void)
       c = bg_GlowHit(L, s) * L->bounce;
       if (c <= 0)
         continue;
+      if (c > sglow_best[s])         // the strongest light is the one the sector's shadows are measured from
+      {
+        sglow_best[s] = (float) c;
+        sglow_src[s * 4] = (float) L->a[0];
+        sglow_src[s * 4 + 1] = (float) L->a[1];
+        sglow_src[s * 4 + 2] = (float) L->a[2];
+        sglow_src[s * 4 + 3] = L->shadow ? 1.0f : 0.0f;
+      }
       for (ch = 0; ch < 3; ++ch)
       {
         float v = (float) (c * L->col[ch]), *t = &sglow_target[s * 3 + ch];
@@ -2225,6 +2243,27 @@ static dboolean bg_ShadowLit(const bg_light_t* L, double px, double py, double p
   if (!bg_Los(&world_los, L->a[0], L->a[1], L->a[2], tx, ty, tz))
     return false;
   return num_occ == 0 || !bg_ThingBlocks(L->a[0], L->a[1], L->a[2], tx, ty, tz);
+}
+
+// the spilled light of a sector does not go where its light cannot: a point in the shadow of a wall, a ledge or a pillar
+// (seen from the light that lit the sector) gets none of it
+static dboolean bg_GlowSeen(int s, double px, double py, double pz, const double* n)
+{
+  const float* src;
+  double tx = px, ty = py, tz = pz;
+
+  if (!sglow_src || s < 0 || s >= sglow_n || !world_los.start)
+    return true;
+  src = &sglow_src[s * 4];
+  if (src[3] < 0.5f)
+    return true;
+  if (n)
+  {
+    tx += n[0]; ty += n[1]; tz += n[2];
+  }
+  if (!bg_Los(&world_los, src[0], src[1], src[2], tx, ty, tz))
+    return false;
+  return num_occ == 0 || !bg_ThingBlocks(src[0], src[1], src[2], tx, ty, tz);
 }
 
 static void bg_BakeFlats(bg_slight_t* S, const bg_los_t* los)
@@ -3490,7 +3529,7 @@ static void bg_ColLevel(void* c, int y, bg_level_t* out)
 
     bg_AccAdd(&a, v > 0.98 ? 0.98 : v, k->b[i].S->g.col);
   }
-  if (k->glow > 0)
+  if (k->glow > 0 && bg_GlowSeen(wall.sector, k->px, k->py, pz, wall.n))
     bg_AccAdd(&a, k->glow, k->gcol);
   total = bg_AccDone(&a, col);
   bg_LitLevel(out, k->base_row, total, col);
@@ -3670,7 +3709,7 @@ static void bg_SpanLevel(void* c, int x, bg_level_t* out)
     {
       double gc[3], gs = bg_GlowAt((int) (ss->sector - sectors), gc);
 
-      if (gs > 0)
+      if (gs > 0 && bg_GlowSeen((int) (ss->sector - sectors), px, py, plane_z, plane_n))
         bg_AccAdd(&a, gs, gc);
     }
   }

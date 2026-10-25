@@ -365,3 +365,5 @@ the two-sided line has an opening of the window's size. Middle textures (glass, 
 light in a sector on the outside, high enough to shine through (a raised terrace, or a light on a pole).
 
 Bounce with several lights: each light's contribution to a sector is `bounce * hit * colour`; contributions from different lights are screen-blended per channel (`1 - prod(1 - c)`). Spinning spots keep 60% of their omni reach as a floor so the glow pulses instead of switching off.
+
+Bounce and shadows: the glow of a sector is blocked where the light that produced it is blocked (same rays as the light's own shadows), so shadows stay black.
