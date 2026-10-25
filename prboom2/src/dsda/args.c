@@ -15,6 +15,7 @@
 //	DSDA (Command Line) Args
 //
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -736,6 +737,17 @@ static void dsda_ParseArg(arg_config_t* config, dsda_arg_t* arg, int argv_i) {
   for (arg->count = 0; argv_i + arg->count < dsda_argc - 1; ++arg->count) {
     int x;
     dboolean is_integer;
+
+    // Begotten: the editor passes the map's lump name (UDB's %L gives MAP01), so -warp MAP01 means -warp 1
+    if (!strcmp(config->name, "-warp")) {
+      const char* a = dsda_argv[argv_i + arg->count + 1];
+
+      if (!strncasecmp(a, "MAP", 3) && isdigit((unsigned char) a[3])) {
+        static char warp_num[16];
+        snprintf(warp_num, sizeof(warp_num), "%d", atoi(a + 3));
+        dsda_argv[argv_i + arg->count + 1] = warp_num;
+      }
+    }
 
     is_integer = sscanf(dsda_argv[argv_i + arg->count + 1], "%d", &x);
 

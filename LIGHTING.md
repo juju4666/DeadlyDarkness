@@ -172,6 +172,7 @@ Options for `light`:
 | `spot INNER OUTER`    | a cone: full inside INNER degrees, fading out at OUTER (half angles) |
 | `pitch DEG`           | cone direction, -90 = straight down                                  |
 | `shadow`              | with `movable`: the live light is blocked by walls, steps and closed doors (a ray per lit point, so use it on one or two lights, not twenty) |
+| `bounce STRENGTH` | the light spills its colour into every sector it reaches: STRENGTH (0-1; gyros have 0.3) is how bright a sector gets when the light hits something in it. The wash jumps up and fades over about half a second, so a sweeping beam leaves a trailing glow. A menu option ("Light Bounce") switches it off |
 | `glow RADIUS STRENGTH` | with `movable`/`spin`: also a small round light of that radius at the light itself, at STRENGTH times the light's strength (the gyros have `glow 256 0.25 shadow`) |
 | `spin DPS`            | the cone or tube turns round DPS degrees a second (negative = the other way); implies `movable` |
 | `tube LEN`            | a strip light LEN units long instead of a point                      |

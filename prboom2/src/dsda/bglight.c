@@ -99,6 +99,7 @@ typedef struct
   double corona;                   // radius in screen pixels of the corona (a bright star that keeps its size at any distance), 0 = none
   double cnear, cfar;              // the corona is invisible nearer than cnear map units and full beyond cfar
   dboolean shadow;                 // movable light that casts shadows (a ray to every lit point; BGLIGHT `shadow`)
+  double bounce;                   // 0..1: how much of its colour it spills into every sector it reaches (BGLIGHT `bounce`)
   double glow_radius, glow_strength; // a small point light at the light itself (BGLIGHT `glow`), e.g. the lamp of a gyro beacon
   double side, drop;               // flashlight only: held this far to the right of and below the eye (map units), so that shadows show
 } bg_lightdef_t;
@@ -114,6 +115,10 @@ static void bg_WorldLosEnsure(void);
 static void bg_CollectOccluders(void);
 static dboolean thing_shadows_on = true;   // BGLIGHT `thingshadows off` turns the things' shadows off for the whole wad
 static dboolean bg_ClearPath(double x0, double y0, double z0, double x1, double y1, double z1);
+static void bg_GlowUpdate(void);
+static double bg_GlowAt(int sector, double* colour);
+static void bg_GlowReset(void);
+static dboolean glow_any;                    // some sector holds spilled light this frame
 
 typedef struct
 {
@@ -131,6 +136,7 @@ typedef struct
   double sdir[3];
   dboolean shadow;                 // live light that is blocked by walls, steps and doors
   dboolean flare;                  // a turning beam: its corona and halo only show while the beam points at the viewer
+  double bounce;                   // see bg_lightdef_t
 } bg_light_t;
 
 static const char bg_default_lights[] =
@@ -166,9 +172,9 @@ static const char bg_default_lights[] =
   "# (negative turns the other way; a placed gyro's first argument sets it, in tens of degrees per second); `glow RADIUS STRENGTH`\n"
   "# adds a small round light at the lamp itself; the thing's angle is where the beam points at the start, so two things 180 degrees apart\n"
   "# make the two-beam kind. Thing_Deactivate / Thing_Activate (or the editor's Dormant flag) switch it off and on.\n"
-  "light 20301 gyro_red   halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color red   spin 480 glow 256 0.25 shadow\n"
-  "light 20302 gyro_amber halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color amber spin 480 glow 256 0.25 shadow\n"
-  "light 20303 gyro_blue  halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color blue  spin 480 glow 256 0.25 shadow\n"
+  "light 20301 gyro_red   halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color red   spin 480 glow 256 0.25 shadow bounce 0.3\n"
+  "light 20302 gyro_amber halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color amber spin 480 glow 256 0.25 shadow bounce 0.3\n"
+  "light 20303 gyro_blue  halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color blue  spin 480 glow 256 0.25 shadow bounce 0.3\n"
   "lantern radius 150 strength 0.7 height 52 color candle\n"
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
@@ -383,6 +389,7 @@ static void bg_ParseLightText(const char* text_in)
         if (!strcasecmp(w, "ceiling")) d.from_ceiling = true;
         else if (!strcasecmp(w, "movable")) d.movable = true;
         else if (!strcasecmp(w, "shadow")) d.shadow = true;
+        else if (!strcasecmp(w, "bounce") && (v = strtok_r(NULL, " \t\r", &save))) d.bounce = atof(v);
         else if (!strcasecmp(w, "flicker")) d.flicker = 1;
         else if (!strcasecmp(w, "pulse")) d.flicker = 2;
         else if (!strcasecmp(w, "rate") && (v = strtok_r(NULL, " \t\r", &save))) d.flick_rate = atof(v);
@@ -596,6 +603,7 @@ static void bg_ParseLightText(const char* text_in)
             t->cnear = atof(v1), t->cfar = atof(v2);
         }
         else if (!strcasecmp(w, "shadow")) t->shadow = true;
+        else if (!strcasecmp(w, "bounce") && (v = strtok_r(NULL, " \t\r", &save))) t->bounce = atof(v);
         else if (!strcasecmp(w, "noshadow")) t->shadow = false;
         else if (!strcasecmp(w, "offset") && t == &dyn_flashlight)
         {
@@ -813,6 +821,7 @@ static void bg_InitLight(bg_light_t* L, const bg_lightdef_t* d, const mobj_t* mo
   L->shadow = d->shadow;
   L->corona = d->corona;
   L->flare = d->spin != 0.0;
+  L->bounce = d->bounce;
   L->cnear = d->cnear > 0 ? d->cnear : 40.0;
   L->cfar = d->cfar > L->cnear ? d->cfar : L->cnear + 100.0;
   L->r2 = d->radius * d->radius;
@@ -1206,6 +1215,7 @@ void bg_LightsBeginFrame(void)
           g.strength = tmp.strength * tmp.glow_strength;
           g.halo = 0;
           g.corona = 0;                // (the lamp's point light is blocked by walls and ledges too)
+          g.bounce = 0;                // (the beam spills light, not its lamp)
           g.glow_radius = 0;
           bg_AddLight(&g, mo, x, y, z, yaw, (unsigned) (mo->x >> 16) * 31u + (unsigned) (mo->y >> 16), cp);
         }
@@ -1248,7 +1258,8 @@ void bg_LightsBeginFrame(void)
         break;
       }
   }
-  frame_active = num_lights > 0 || i > 0 || fog_on;
+  bg_GlowUpdate();
+  frame_active = num_lights > 0 || i > 0 || fog_on || glow_any;
   if (frame_active)
     bg_CheckTintCache();
   if (fog_count > BG_FOG_SLOTS * 3 / 4)
@@ -1392,6 +1403,163 @@ static double bg_Total(const int* set, int count, double px, double py, double p
   bg_AccInit(&a);
   bg_AccLive(&a, set, count, px, py, pz, n, sector);
   return bg_AccDone(&a, colour);
+}
+
+
+//
+// Spilled light (bounce)
+//
+// A light with `bounce` colours every sector it reaches, as if its light had bounced off the walls: each such sector
+// holds a coloured ambient light that jumps up when the light hits something in the sector and fades over about half a
+// second. So a gyro's beam sweeping a room washes the whole room in its colour for a moment, and the wash trails the beam.
+// The sector's value is one more "light" without a position when its surfaces are lit.
+//
+
+#define BG_GLOW_DECAY 0.9                    // per game tic
+static float* sglow;                         // 3 per sector: red, green, blue strength
+static struct { double x0, y0, x1, y1; }* sbox;
+static int sglow_n, sglow_tic;
+
+static void bg_GlowReset(void)
+{
+  free(sglow);
+  free(sbox);
+  sglow = NULL;
+  sbox = NULL;
+  sglow_n = 0;
+  glow_any = false;
+}
+
+static void bg_GlowEnsure(void)
+{
+  int i, k;
+
+  if (sglow && sglow_n == numsectors)
+    return;
+  bg_GlowReset();
+  sglow = calloc(numsectors * 3, sizeof(float));
+  sbox = calloc(numsectors, sizeof(*sbox));
+  for (i = 0; i < numsectors; ++i)
+  {
+    double x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+
+    for (k = 0; k < sectors[i].linecount; ++k)
+    {
+      const line_t* l = sectors[i].lines[k];
+      double xs[2] = { bg_Fix(l->v1->x), bg_Fix(l->v2->x) }, ys[2] = { bg_Fix(l->v1->y), bg_Fix(l->v2->y) };
+      int e;
+
+      for (e = 0; e < 2; ++e)
+      {
+        if (xs[e] < x0) x0 = xs[e];
+        if (xs[e] > x1) x1 = xs[e];
+        if (ys[e] < y0) y0 = ys[e];
+        if (ys[e] > y1) y1 = ys[e];
+      }
+    }
+    sbox[i].x0 = x0; sbox[i].y0 = y0; sbox[i].x1 = x1; sbox[i].y1 = y1;
+  }
+  sglow_n = numsectors;
+  sglow_tic = leveltime;
+}
+
+// how much of light L reaches sector s: the best of a few sample points on its floor, in the middle and on its ceiling
+static double bg_GlowHit(const bg_light_t* L, int s)
+{
+  static const double fx[5] = { 0.5, 0.25, 0.75, 0.25, 0.75 }, fy[5] = { 0.5, 0.25, 0.25, 0.75, 0.75 };
+  static const double up[3] = { 0, 0, 1 }, down[3] = { 0, 0, -1 };
+  double fl = bg_Fix(sectors[s].floorheight), ce = bg_Fix(sectors[s].ceilingheight), best = 0;
+  int i;
+
+  if (ce - fl < 8.0)
+    return 0;
+  for (i = 0; i < 5; ++i)
+  {
+    double x = sbox[s].x0 + (sbox[s].x1 - sbox[s].x0) * fx[i], y = sbox[s].y0 + (sbox[s].y1 - sbox[s].y0) * fy[i];
+    const subsector_t* ss = R_PointInSubsector((fixed_t) (x * 65536.0), (fixed_t) (y * 65536.0));
+    double z[3], c;
+    const double* n[3] = { up, NULL, down };
+    int j;
+
+    if (!ss || (int) (ss->sector - sectors) != s)
+      continue;
+    z[0] = fl + 12.0; z[1] = 0.5 * (fl + ce); z[2] = ce - 12.0;
+    for (j = 0; j < 3; ++j)
+    {
+      c = bg_Contribution(L, x, y, z[j], n[j]);
+      if (c <= best)
+        continue;
+      if (L->shadow && !bg_ShadowLit(L, x, y, z[j], n[j]))
+        continue;
+      best = c;
+    }
+  }
+  return best;
+}
+
+static void bg_GlowUpdate(void)
+{
+  int i, s, dt;
+  double top = 0;
+
+  glow_any = false;
+  if (!dsda_IntConfig(dsda_config_begotten_bounce) || numsectors <= 0 || getenv("BGLIGHT_NOBOUNCE"))   // (the env switch is for tests)
+    return;
+  bg_GlowEnsure();
+  dt = leveltime - sglow_tic;
+  if (dt < 0 || dt > 105)
+  {
+    memset(sglow, 0, numsectors * 3 * sizeof(float));
+    dt = 0;
+  }
+  if (dt > 0)
+  {
+    float f = (float) pow(BG_GLOW_DECAY, dt);
+
+    for (i = 0; i < numsectors * 3; ++i)
+      sglow[i] = sglow[i] * f < 0.004f ? 0.0f : sglow[i] * f;
+    sglow_tic = leveltime;
+  }
+  for (i = 0; i < num_lights; ++i)
+  {
+    const bg_light_t* L = &lights[i];
+
+    if (L->bounce <= 0 || L->sun)
+      continue;
+    for (s = 0; s < numsectors; ++s)
+    {
+      double c;
+      int ch;
+
+      if (L->stamp[s] != frame_id)
+        continue;
+      c = bg_GlowHit(L, s) * L->bounce;
+      if (c <= 0)
+        continue;
+      for (ch = 0; ch < 3; ++ch)
+        if (c * L->col[ch] > sglow[s * 3 + ch])
+          sglow[s * 3 + ch] = (float) (c * L->col[ch]);
+    }
+  }
+  for (i = 0; i < numsectors * 3; ++i)
+    if (sglow[i] > top)
+      top = sglow[i];
+  glow_any = top >= 0.01;
+}
+
+// the spilled light of sector s: its strength (0 = none) and colour (largest channel 1)
+static double bg_GlowAt(int s, double* colour)
+{
+  double r, g, b, mx;
+
+  if (!glow_any || s < 0 || s >= sglow_n)
+    return 0;
+  r = sglow[s * 3]; g = sglow[s * 3 + 1]; b = sglow[s * 3 + 2];
+  mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+  if (mx < 0.01)
+    return 0;
+  colour[0] = r / mx; colour[1] = g / mx; colour[2] = b / mx;
+  return mx > 0.9 ? 0.9 : mx;
 }
 
 
@@ -1649,6 +1817,7 @@ static void bg_FogZonesBuild(const char* name)
       fogz[z].dark = f->dark;
     }
   num_fogz = n;
+  bg_GlowReset();
   free(sector_zone);
   sector_zone = calloc(numsectors > 0 ? numsectors : 1, 1);
   sector_zone_n = numsectors;
@@ -3070,6 +3239,7 @@ static struct
   const bg_seglay_t* lay;           // its baked lights
   int count;
   int set[BG_MAXLIGHTS];
+  double glow, gcol[3];             // the spilled light of its sector (0 = none)
 } wall;
 
 dboolean bg_LightBeginSeg(const seg_t* seg, const sector_t* front)
@@ -3095,6 +3265,7 @@ dboolean bg_LightBeginSeg(const seg_t* seg, const sector_t* front)
   wall.dx = (bx - ax) / len; wall.dy = (by - ay) / len;
   wall.len = len;
   wall.lay = NULL;
+  wall.glow = bg_GlowAt(wall.sector, wall.gcol);
   if (seglay && num_sv > 0)
   {
     int sn = (int) (seg - segs);
@@ -3110,7 +3281,7 @@ dboolean bg_LightBeginSeg(const seg_t* seg, const sector_t* front)
     if (L->stamp[wall.sector] == frame_id && m < L->radius + 0.5 * hypot(L->b[0] - L->a[0], L->b[1] - L->a[1]))
       wall.set[wall.count++] = i;
   }
-  return wall.count > 0 || wall.lay != NULL || fog_on;
+  return wall.count > 0 || wall.lay != NULL || fog_on || wall.glow > 0;
 }
 
 // the world point a screen column looks at, `scale` being the wall's scale there
@@ -3272,6 +3443,7 @@ typedef struct
   draw_column_vars_t* d;
   int base_row;
   int light;                        // the sector's light level (for the haze)
+  double glow, gcol[3];             // spilled light of the sector
   double px, py, scale, dist;
   int zone;
   int count;
@@ -3297,6 +3469,8 @@ static void bg_ColLevel(void* c, int y, bg_level_t* out)
 
     bg_AccAdd(&a, v > 0.98 ? 0.98 : v, k->b[i].S->g.col);
   }
+  if (k->glow > 0)
+    bg_AccAdd(&a, k->glow, k->gcol);
   total = bg_AccDone(&a, col);
   bg_LitLevel(out, k->base_row, total, col);
   bg_FogLevel(out, k->dist, total, k->zone, k->light);
@@ -3324,12 +3498,14 @@ void bg_LitColumn(R_DrawColumn_f colfunc, draw_column_vars_t* d, fixed_t scale)
   k.count = 0;
   k.nb = 0;
   k.light = sectors[wall.sector].lightlevel;
-  if (k.base_row < 0 || (wall.count == 0 && !wall.lay && !fog_on) || scale <= 0 || yh < yl)
+  k.glow = wall.glow;
+  k.gcol[0] = wall.gcol[0]; k.gcol[1] = wall.gcol[1]; k.gcol[2] = wall.gcol[2];
+  if (k.base_row < 0 || (wall.count == 0 && !wall.lay && !fog_on && wall.glow <= 0) || scale <= 0 || yh < yl)
   {
     colfunc(d);
     return;
   }
-  if (fog_on && wall.count == 0 && !wall.lay && !dsda_IntConfig(dsda_config_begotten_light_dither))
+  if (fog_on && wall.count == 0 && !wall.lay && wall.glow <= 0 && !dsda_IntConfig(dsda_config_begotten_light_dither))
   {
     // only fog on this wall: the whole column gets one colormap
     static const double white[3] = { 1, 1, 1 };
@@ -3377,7 +3553,7 @@ void bg_LitColumn(R_DrawColumn_f colfunc, draw_column_vars_t* d, fixed_t scale)
       ++k.nb;
     }
   }
-  if (!k.count && !k.nb && !fog_on)
+  if (!k.count && !k.nb && !fog_on && k.glow <= 0)
   {
     colfunc(d);
     return;
@@ -3451,7 +3627,7 @@ static void bg_SpanLevel(void* c, int x, bg_level_t* out)
   bg_acc_t a;
   int i;
 
-  if (k->count || k->nst || fog_multi)
+  if (k->count || k->nst || fog_multi || glow_any)
   {
     double theta = (double) (int) xtoviewangle[x] * (2.0 * M_PI / 4294967296.0);
     double ang = (double) viewangle * (2.0 * M_PI / 4294967296.0) + theta;
@@ -3463,11 +3639,19 @@ static void bg_SpanLevel(void* c, int x, bg_level_t* out)
   else
     r = k->depth * inv_cos[x];     // fog only
   bg_AccInit(&a);
-  if (k->count)
+  if (k->count || glow_any)
   {
     subsector_t* ss = R_PointInSubsector((fixed_t) (px * 65536.0), (fixed_t) (py * 65536.0));
 
-    bg_AccLive(&a, k->set, k->count, px, py, plane_z, plane_n, ss ? (int) (ss->sector - sectors) : -1);
+    if (k->count)
+      bg_AccLive(&a, k->set, k->count, px, py, plane_z, plane_n, ss ? (int) (ss->sector - sectors) : -1);
+    if (glow_any && ss)
+    {
+      double gc[3], gs = bg_GlowAt((int) (ss->sector - sectors), gc);
+
+      if (gs > 0)
+        bg_AccAdd(&a, gs, gc);
+    }
   }
   for (i = 0; i < k->nst; ++i)
   {
@@ -3567,7 +3751,7 @@ dboolean bg_LitSpan(draw_span_vars_t* ds)
     if (fabs(dz) < S->g.radius && h < sqrt(S->reach * S->reach - dz * dz + 1.0))
       k.st[k.nst++] = S;
   }
-  if (!k.count && !k.nst && !fog_on)
+  if (!k.count && !k.nst && !fog_on && !glow_any)
     return false;
   bg_Runs(ds->x1, ds->x2, bg_SpanLevel, bg_SpanDraw, &k, false, ds->y, BG_SAMPLE_STEP, bg_AnyShadow(k.set, k.count));
   return true;
@@ -3599,6 +3783,12 @@ const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixe
 
     bg_AccInit(&a);
     bg_AccLive(&a, set, num_lights, fx, fy, bg_Fix(z), NULL, s);
+    {
+      double gc[3], gs = bg_GlowAt(s, gc);
+
+      if (gs > 0)
+        bg_AccAdd(&a, gs, gc);
+    }
     // baked lights: lit like any thing, but only where their floor grid says the light gets there (shadows)
     for (i = 0; i < num_sv; ++i)
     {

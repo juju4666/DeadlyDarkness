@@ -4792,6 +4792,7 @@ setup_menu_t comp_options_settings[] = {
   { "Smooth Flashlight Aim", S_YESNO, m_conf, G2_X, dsda_config_begotten_flashlight_smooth },
   { "Flashlight Shadows", S_YESNO, m_conf, G2_X, dsda_config_begotten_flashlight_shadows },
   { "Monsters Block Flashlight", S_YESNO, m_conf, G2_X, dsda_config_begotten_thing_shadows },
+  { "Light Bounce (Coloured Spill)", S_YESNO, m_conf, G2_X, dsda_config_begotten_bounce },
   { "Unlock All Classes (Dev)", S_YESNO, m_conf, G2_X, dsda_config_begotten_dev_unlock },
   FINAL_ENTRY
 };

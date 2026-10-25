@@ -1028,6 +1028,10 @@ dsda_config_t dsda_config[dsda_config_count] = {
     "begotten_thing_shadows", dsda_config_begotten_thing_shadows,
     CONF_BOOL(1), NULL, NOT_STRICT
   },
+  [dsda_config_begotten_bounce] = {
+    "begotten_bounce", dsda_config_begotten_bounce,
+    CONF_BOOL(1), NULL, NOT_STRICT
+  },
   [dsda_config_begotten_weather] = {
     "begotten_weather", dsda_config_begotten_weather,
     CONF_BOOL(1), NULL, NOT_STRICT
