@@ -166,9 +166,9 @@ static const char bg_default_lights[] =
   "# (negative turns the other way; a placed gyro's first argument sets it, in tens of degrees per second); `glow RADIUS STRENGTH`\n"
   "# adds a small round light at the lamp itself; the thing's angle is where the beam points at the start, so two things 180 degrees apart\n"
   "# make the two-beam kind. Thing_Deactivate / Thing_Activate (or the editor's Dormant flag) switch it off and on.\n"
-  "light 20301 gyro_red   halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color red   spin 480 glow 256 0.25\n"
-  "light 20302 gyro_amber halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color amber spin 480 glow 256 0.25\n"
-  "light 20303 gyro_blue  halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color blue  spin 480 glow 256 0.25\n"
+  "light 20301 gyro_red   halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color red   spin 480 glow 256 0.25 shadow\n"
+  "light 20302 gyro_amber halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color amber spin 480 glow 256 0.25 shadow\n"
+  "light 20303 gyro_blue  halo 28 corona 12 radius 720 strength 1.7 height 24 ceiling spot 18 42 pitch -30 color blue  spin 480 glow 256 0.25 shadow\n"
   "lantern radius 150 strength 0.7 height 52 color candle\n"
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
@@ -1195,8 +1195,7 @@ void bg_LightsBeginFrame(void)
           g.radius = tmp.glow_radius;
           g.strength = tmp.strength * tmp.glow_strength;
           g.halo = 0;
-          g.corona = 0;
-          g.shadow = false;
+          g.corona = 0;                // (the lamp's point light is blocked by walls and ledges too)
           g.glow_radius = 0;
           bg_AddLight(&g, mo, x, y, z, yaw, (unsigned) (mo->x >> 16) * 31u + (unsigned) (mo->y >> 16), cp);
         }

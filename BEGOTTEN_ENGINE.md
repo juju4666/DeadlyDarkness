@@ -795,3 +795,6 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 ## 0.10.62 - gyro reach
 * With the beam tilted -30 degrees and the lamp near a 288-high ceiling, the beam's axis met the floor about 460 units away, at the very edge of the 480 radius, and the floor directly below was outside the cone: walls lit, floor dark. Gyro radius is now 720 (`light 2030x ... radius 720 strength 1.7`). Rooms with high ceilings can raise it further with the placed light's own radius.
+
+## 0.10.63 - gyro lights cast shadows
+* The gyro lights (20301-20303) and the point light at their lamp now carry the `shadow` flag, so walls, ledges, steps and doors block the beam the way they block the flashlight (the "Flashlight Shadows" menu option switches all shadow rays off). Before, only the flashlight cast shadows, and a ledge in front of a wall did not shade it.
