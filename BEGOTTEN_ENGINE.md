@@ -785,3 +785,7 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 ## 0.10.59 - the dark fade keeps no blue residue
 * The fade of the darkest colormap rows (0.10.57) matched dark results with a colour weighting that makes blue errors cheap, so dark browns and reds at distance snapped to the darkest bluish palette colour (index 159) and showed as flat dark-blue panels. Now: a result under 14 in every channel is index 0 (black), and the matching uses plain distance. Rows 28-31 are black for practically every colour.
 * `BEGOTTEN_HOM=1` (developer aid): fills the 3D view with red before drawing, so any pixel the renderer does not draw shows up (hall of mirrors).
+
+## 0.10.60 - gyro lights
+* The beam is tilted 45 degrees down (`pitch -45`, was -20) and stronger (strength 1.7, was 1.0); the small point light at the lamp is weaker (`glow 320 0.25`, was 0.6).
+* A turning beam's corona and halo now flash: they only show while the beam points at the viewer (within about 40 degrees, full at 8), so the lamp no longer shows a steady glow that gives the point light away (`bg_FlareFactor`; any light with `spin` and a cone).

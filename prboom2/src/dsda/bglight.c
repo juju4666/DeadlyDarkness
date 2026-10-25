@@ -130,6 +130,7 @@ typedef struct
   dboolean sun;                    // a directional light (BGLIGHT `sun`): no position, `sdir` points toward the sun
   double sdir[3];
   dboolean shadow;                 // live light that is blocked by walls, steps and doors
+  dboolean flare;                  // a turning beam: its corona and halo only show while the beam points at the viewer
 } bg_light_t;
 
 static const char bg_default_lights[] =
@@ -165,9 +166,9 @@ static const char bg_default_lights[] =
   "# (negative turns the other way; a placed gyro's first argument sets it, in tens of degrees per second); `glow RADIUS STRENGTH`\n"
   "# adds a small round light at the lamp itself; the thing's angle is where the beam points at the start, so two things 180 degrees apart\n"
   "# make the two-beam kind. Thing_Deactivate / Thing_Activate (or the editor's Dormant flag) switch it off and on.\n"
-  "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color red   spin 480 glow 320 0.6\n"
-  "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color amber spin 480 glow 320 0.6\n"
-  "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.0 height 24 ceiling spot 12 30 pitch -20 color blue  spin 480 glow 320 0.6\n"
+  "light 20301 gyro_red   halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 12 30 pitch -45 color red   spin 480 glow 320 0.25\n"
+  "light 20302 gyro_amber halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 12 30 pitch -45 color amber spin 480 glow 320 0.25\n"
+  "light 20303 gyro_blue  halo 28 corona 12 radius 480 strength 1.7 height 24 ceiling spot 12 30 pitch -45 color blue  spin 480 glow 320 0.25\n"
   "lantern radius 150 strength 0.7 height 52 color candle\n"
   "# lights that follow the action: projectiles (colour from their own sprite unless a colour is given), the\n"
   "# explosion of a projectile, and the flash of a player's gun\n"
@@ -801,6 +802,7 @@ static void bg_InitLight(bg_light_t* L, const bg_lightdef_t* d, const mobj_t* mo
   L->halo = d->halo;
   L->shadow = d->shadow;
   L->corona = d->corona;
+  L->flare = d->spin != 0.0;
   L->cnear = d->cnear > 0 ? d->cnear : 40.0;
   L->cfar = d->cfar > L->cnear ? d->cfar : L->cnear + 100.0;
   L->r2 = d->radius * d->radius;
@@ -3675,6 +3677,24 @@ static void bg_HaloAdd(const double* pa, const double* pb, double size, double s
   ++num_halos;
 }
 
+// A turning beam (a gyro) flashes: its corona and halo are only seen while the beam points at the viewer.
+static double bg_FlareFactor(const bg_light_t* L)
+{
+  double mx, my, mz, d, c;
+
+  if (!L->flare || L->omni)
+    return 1.0;
+  mx = bg_Fix(viewx) - 0.5 * (L->a[0] + L->b[0]);
+  my = bg_Fix(viewy) - 0.5 * (L->a[1] + L->b[1]);
+  mz = bg_Fix(viewz) - 0.5 * (L->a[2] + L->b[2]);
+  d = sqrt(mx * mx + my * my + mz * mz);
+  if (d < 1.0)
+    return 1.0;
+  c = (L->dir[0] * mx + L->dir[1] * my + L->dir[2] * mz) / d;   // cosine of the angle between the beam and the viewer
+  c = (c - 0.766) / (0.99 - 0.766);                              // 0 at 40 degrees off the beam, 1 at 8
+  return c < 0 ? 0 : c > 1.0 ? 1.0 : c * c * (3.0 - 2.0 * c);
+}
+
 int bg_HaloPrepare(void)
 {
   int i;
@@ -3690,10 +3710,12 @@ int bg_HaloPrepare(void)
 
     if (L->sun)
       continue;
+    double fl = bg_FlareFactor(L), str = L->strength > 1.0 && L->flare ? 1.0 : L->strength;
+
     if (L->halo > 0 && halo_on)
-      bg_HaloAdd(L->a, L->b, L->halo, L->strength * L->flick, L->col, false, 0, 0);
+      bg_HaloAdd(L->a, L->b, L->halo, str * L->flick * fl, L->col, false, 0, 0);
     if (L->corona > 0 && corona_on)
-      bg_HaloAdd(L->a, L->b, L->corona, L->strength * L->flick, L->col, true, L->cnear, L->cfar);
+      bg_HaloAdd(L->a, L->b, L->corona, str * L->flick * fl, L->col, true, L->cnear, L->cfar);
   }
   for (i = 0; i < num_sv; ++i)
   {

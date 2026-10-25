@@ -172,7 +172,7 @@ Options for `light`:
 | `spot INNER OUTER`    | a cone: full inside INNER degrees, fading out at OUTER (half angles) |
 | `pitch DEG`           | cone direction, -90 = straight down                                  |
 | `shadow`              | with `movable`: the live light is blocked by walls, steps and closed doors (a ray per lit point, so use it on one or two lights, not twenty) |
-| `glow RADIUS STRENGTH` | with `movable`/`spin`: also a small round light of that radius at the light itself, at STRENGTH times the light's strength (the gyros have `glow 320 0.6`) |
+| `glow RADIUS STRENGTH` | with `movable`/`spin`: also a small round light of that radius at the light itself, at STRENGTH times the light's strength (the gyros have `glow 320 0.25`) |
 | `spin DPS`            | the cone or tube turns round DPS degrees a second (negative = the other way); implies `movable` |
 | `tube LEN`            | a strip light LEN units long instead of a point                      |
 | `flicker`             | random flicker (see below)                                           |
