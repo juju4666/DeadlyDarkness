@@ -93,6 +93,7 @@
 #include "dsda/damage_kind.h"
 #include "dsda/begotten.h"
 #include "dsda/bgvoxel.h"
+#include "dsda/bgface.h"
 #include "dsda/bgclass.h"
 #include "dsda/bgpalette.h"
 #include "dsda/bgmonster.h"
@@ -2307,7 +2308,7 @@ static void D_DoomMainSetup(void)
   //jff 9/3/98 use logical output routine
   lprintf(LO_DEBUG, "\nP_Init: Init Playloop state.\n");
   P_Init();
-  if (getenv("BEGOTTEN_SELFTEST") && *getenv("BEGOTTEN_SELFTEST") == '3') { { char vm[128]; int vf = bgvox_SelfTest(vm, sizeof(vm)); lprintf(LO_INFO, "SELFTEST %s: %s\n", vf ? "FAIL" : "ok", vm); } dsda_BgPoseSelfTest(); dsda_BgMonsterSelfTest(); dsda_BgEndingSelfTest(); dsda_BgSplitSelfTest(); dsda_BgNetSelfTest(); dsda_BgProgressSelfTest(); }
+  if (getenv("BEGOTTEN_SELFTEST") && *getenv("BEGOTTEN_SELFTEST") == '3') { { char fm[128]; int ff = bg_FitSelfTest(fm, sizeof(fm)); lprintf(LO_INFO, "SELFTEST %s: %s\n", ff ? "FAIL" : "ok", fm); } { char vm[128]; int vf = bgvox_SelfTest(vm, sizeof(vm)); lprintf(LO_INFO, "SELFTEST %s: %s\n", vf ? "FAIL" : "ok", vm); } dsda_BgPoseSelfTest(); dsda_BgMonsterSelfTest(); dsda_BgEndingSelfTest(); dsda_BgSplitSelfTest(); dsda_BgNetSelfTest(); dsda_BgProgressSelfTest(); }
 
   // Must be after P_Init
   HandleWarp();

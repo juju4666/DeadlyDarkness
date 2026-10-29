@@ -39,6 +39,8 @@
 #include "st_lib.h"
 #include "r_main.h"
 #include "lprintf.h"
+#include "r_patch.h"
+#include "dsda/bgface.h"
 
 int sts_colored_numbers; //jff 2/18/98 control to enable status color changes
 int sts_pct_always_gray; // killough 2/21/98: always gray %'s? bug or feature?
@@ -294,7 +296,16 @@ void STlib_updateMultIcon
       V_CopyRect(BG, FG, x, y, w, h, VPT_STRETCH | VPT_ALIGN_BOTTOM);
     }
     if (*mi->inum != -1)  // killough 2/16/98: redraw only if != -1
-      V_DrawNumPatch(mi->x, mi->y, FG, mi->p[*mi->inum].lumpnum, CR_DEFAULT, VPT_ALIGN_BOTTOM);
+    {
+      const patchnum_t* pn = &mi->p[*mi->inum];
+      const rpatch_t* rp = R_PatchByNum(pn->lumpnum);
+
+      // Begotten: a picture bigger than its slot (a status face made from a photograph) is shrunk to the slot at the
+      // resolution of the screen; the slot's size is what the patchnum says (see ST_FitFace)
+      if (!(rp && (rp->width > pn->width || rp->height > pn->height) &&
+            bg_DrawFitPatch(pn->lumpnum, mi->x, mi->y, pn->width, pn->height, VPT_STRETCH | VPT_ALIGN_BOTTOM)))
+        V_DrawNumPatch(mi->x, mi->y, FG, pn->lumpnum, CR_DEFAULT, VPT_ALIGN_BOTTOM);
+    }
     mi->oldinum = *mi->inum;
   }
 }

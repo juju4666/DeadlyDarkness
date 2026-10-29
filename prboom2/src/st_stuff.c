@@ -42,6 +42,7 @@
 #include "i_video.h"
 #include "w_wad.h"
 #include "st_stuff.h"
+#include "dsda/bgface.h"
 #include "hu_stuff.h"
 #include "st_lib.h"
 #include "r_main.h"
@@ -1172,6 +1173,18 @@ void ST_Drawer(dboolean refresh)
 
 
 
+// Begotten: a face picture bigger than the slot (35 x 32) fills the slot, whatever its size (bgface.c shrinks it to the
+// screen's resolution): its patchnum says the slot's size so that the bar redraws the right area.
+static void ST_FitFace(patchnum_t* pn)
+{
+  if (pn->width > BG_FACE_W || pn->height > BG_FACE_H)
+  {
+    pn->width = BG_FACE_W;
+    pn->height = BG_FACE_H;
+    pn->leftoffset = pn->topoffset = 0;
+  }
+}
+
 // Begotten: a set of status bar faces. For a class set (prefix other than "STF") every face
 // whose lump does not exist is taken from the fallback set (the stock faces).
 static void ST_LoadFaceSet(patchnum_t* set, const char* prefix, const patchnum_t* fallback)
@@ -1185,7 +1198,10 @@ static void ST_LoadFaceSet(patchnum_t* set, const char* prefix, const patchnum_t
     if (fallback && W_CheckNumForName(namebuf) < 0) \
       set[facenum] = fallback[facenum]; \
     else \
+    { \
       R_SetPatchNum(&set[facenum], namebuf); \
+      ST_FitFace(&set[facenum]); \
+    } \
     ++facenum; \
   } while (0)
 

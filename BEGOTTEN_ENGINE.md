@@ -851,3 +851,12 @@ The car is the example: it is in `begotten.wad` (the lumps `BGVOXEL`, `VXCAR`, `
 **Cost.** Roughly 10 ms per car filling the screen on the slow test machine (the car prototype is 114,000 visible cells, much bigger than a typical prop). Cost grows with the number of visible cells and with the screen area the model covers, so keep props lean. `BGVOX_STATS=1` in the environment prints the timing once per second.
 
 **Known limits.** Collision is the cylinder (radius, height), not the model's shape. A model is only drawn while its origin is on screen. Frame lights are plain point lights (no shadows).
+
+## 0.10.70
+
+Status bar faces can be bigger pictures. A face lump larger than the 35 x 32 slot (for example 192 x 176, from a photograph) is shrunk to the slot at the resolution of the screen instead of being drawn as 35 x 32 big pixels. The engine averages every source pixel that falls on a screen pixel (exact area average, on the colours), then matches the result to the palette with error diffusion (Floyd-Steinberg, ordinary colours 0-239 only), once per face and screen size, and keeps it.
+
+- Names are unchanged: the stock set is `STFST00`... and a class set is its three-letter `face` prefix from BGCLASS (`SLDST00`, `WCHOUCH2`, ...). A set can mix sizes; a face smaller or equal to 35 x 32 is drawn as before, and a class that lacks a lump still falls back to the stock face.
+- Any size works. The most the screen can show is the slot's size on the screen (about 190 x 175 at 1080p, 250 x 230 at 1440p, 380 x 350 at 4K), so a source of 192 x 176 is enough for 1080p and a little soft at 4K. The slot keeps its 35:32 shape: a picture of another shape is stretched to it, so keep photos at that ratio (192 x 176 is 12:11, close enough).
+- `tools/pack_wad.py` dithers face lumps bigger than 35 x 32 when it packs them (the engine's averaging only brings the colours back from a dithered source, not from one snapped to the nearest colour). Other graphics are packed as before.
+- Software renderer only; in OpenGL mode a big face would be drawn full size, so keep the old 35 x 32 faces if you use it.

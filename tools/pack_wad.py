@@ -210,6 +210,60 @@ def _post(out, top, run, prev):
             raise Error("cannot place a post at row %d" % top)
 
 
+# a status bar face: 3 letters (STF for the stock set, or a class's BGCLASS `face` prefix) and the face's name
+FACE_LUMP = re.compile(r'^[A-Z]{3}(ST\d\d|TR\d0|TL\d0|OUCH\d|EVL\d|KILL\d|GOD0|DEAD0)$')
+
+
+def _face_lut(pal):
+    """palette index (0..239) nearest to each colour of 6 bits per channel, as a bytes object (made once)"""
+    lut = getattr(pal, 'lut6', None)
+    if lut is None:
+        import numpy as np
+        p = np.array(pal.rgb[:240], dtype=np.int32)
+        g = np.arange(64, dtype=np.int32) * 4 + 2
+        r, gg, b = np.meshgrid(g, g, g, indexing='ij')
+        cols = np.stack([r.ravel(), gg.ravel(), b.ravel()], axis=1)
+        out = np.empty(len(cols), dtype=np.uint8)
+        for i in range(0, len(cols), 16384):
+            c = cols[i:i + 16384]
+            d = (3 * (c[:, None, 0] - p[None, :, 0]) ** 2 + 4 * (c[:, None, 1] - p[None, :, 1]) ** 2
+                 + 2 * (c[:, None, 2] - p[None, :, 2]) ** 2)
+            out[i:i + 16384] = d.argmin(axis=1)
+        lut = pal.lut6 = out.tobytes()
+    return lut
+
+
+def dither_indices(img, pal):
+    """Floyd-Steinberg error diffusion of an RGB image to the ordinary colours of the palette (0..239). Used for status
+    faces bigger than their 35x32 slot: the engine averages the picture down to the screen's resolution, which brings
+    the colours back only if the picture was dithered rather than snapped to the nearest colour."""
+    lut = _face_lut(pal)
+    w, h = img.size
+    data = img.convert('RGB').tobytes()
+    rgb = pal.rgb
+    out = [[0] * w for _ in range(h)]
+    cur = [[0.0, 0.0, 0.0] for _ in range(w + 2)]
+    for y in range(h):
+        nxt = [[0.0, 0.0, 0.0] for _ in range(w + 2)]
+        xs = range(w) if y % 2 == 0 else range(w - 1, -1, -1)
+        d = 1 if y % 2 == 0 else -1
+        for x in xs:
+            o = (y * w + x) * 3
+            c0 = min(255.0, max(0.0, data[o] + cur[x + 1][0]))
+            c1 = min(255.0, max(0.0, data[o + 1] + cur[x + 1][1]))
+            c2 = min(255.0, max(0.0, data[o + 2] + cur[x + 1][2]))
+            i = lut[(int(c0) >> 2 << 12) | (int(c1) >> 2 << 6) | (int(c2) >> 2)]
+            out[y][x] = i
+            e0, e1, e2 = c0 - rgb[i][0], c1 - rgb[i][1], c2 - rgb[i][2]
+            for (arr, xx, wt) in ((cur, x + 1 + d, 7 / 16), (nxt, x + 1 - d, 3 / 16), (nxt, x + 1, 5 / 16), (nxt, x + 1 + d, 1 / 16)):
+                t = arr[xx]
+                t[0] += e0 * wt
+                t[1] += e1 * wt
+                t[2] += e2 * wt
+        cur = nxt
+    return out
+
+
 def encode_patch(pngdata, pal, name, glow=True):
     img = Image.open(io.BytesIO(pngdata)).convert('RGBA')
     w, h = img.size
@@ -217,6 +271,8 @@ def encode_patch(pngdata, pal, name, glow=True):
         raise Error("%s: picture %dx%d is too large (max 2048x1024)" % (name, w, h))
     off = png_offsets(pngdata) or (0, 0)
     px = img.load()
+    base = os.path.basename(name).upper()
+    dith = dither_indices(img, pal) if FACE_LUMP.match(os.path.splitext(base)[0]) and (w > 35 or h > 32) else None
     cols = []
     for x in range(w):
         out = bytearray()
@@ -229,7 +285,7 @@ def encode_patch(pngdata, pal, name, glow=True):
             y0 = y
             run = bytearray()
             while y < h and px[x, y][3] >= 128 and len(run) < 254:
-                run.append(pal.index(px[x, y][:3], glow))
+                run.append(dith[y][x] if dith else pal.index(px[x, y][:3], glow))
                 y += 1
             prev = _post(out, y0, run, prev)
         out.append(255)
