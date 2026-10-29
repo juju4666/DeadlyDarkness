@@ -20,13 +20,13 @@
 
 #include <ctype.h>
 #include <math.h>
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #ifndef _MSC_VER
 #include <strings.h>
 #endif
+#include "SDL.h"
 #include "doomtype.h"
 
 #include "doomstat.h"
@@ -971,10 +971,7 @@ static int stat_frames;
 
 static double now_ms(void)
 {
-  struct timespec ts;
-
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+  return 1000.0 * (double) SDL_GetPerformanceCounter() / (double) SDL_GetPerformanceFrequency();
 }
 
 static float* zbuf;
