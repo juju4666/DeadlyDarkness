@@ -219,6 +219,7 @@ set(COMMON_SRC
   dsda/bgscale.c
   dsda/bgmonster.c
   dsda/bgroster.c
+  dsda/bgvoxel.c
   dsda/bgending.c
   dsda/bgprogress.c
   dsda/bgcoop.c

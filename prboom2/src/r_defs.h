@@ -525,6 +525,7 @@ typedef struct vissprite_s
   // Begotten: nonzero = a light's glow (index + 1 into bglight's halo list), not a sprite
   int bg_halo;
   int bg_weather;   // nonzero = a speck of rain or snow (index + 1 into bglight's list)
+  int bg_voxel;     // nonzero = a voxel model (instance + 1 in bgvoxel.c)
 } vissprite_t;
 
 //

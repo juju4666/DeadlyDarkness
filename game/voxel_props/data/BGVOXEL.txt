@@ -1,0 +1,9 @@
+# Voxel props (see BEGOTTEN_ENGINE.md 0.10.69).
+#   prop  KEY EDNUM sprite SPRT [radius R] [height H] [health N] [mass M] [offset X Y Z]
+#   model KEY FRAME LUMP [light RADIUS STRENGTH R G B] [yaw DEGREES]
+# FRAME: A idle, B explosion, C and D burning wreck (D optional). One cell = one art pixel.
+prop  car 21101 sprite VCAR radius 44 height 44 health 150 mass 1000
+model car A VXCAR
+model car B VXCARB light 360 1.0  1.0 0.55 0.2
+model car C VXCARC light 300 0.85 1.0 0.5  0.15
+model car D VXCARD light 300 0.8  1.0 0.55 0.2

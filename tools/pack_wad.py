@@ -22,7 +22,7 @@ Folder layout (the FIRST folder decides what a file is; below it, make as many f
   music/       *.mus *.mid *.ogg ... -> raw music lumps
   colormaps/   raw lumps between C_START / C_END
   maps/        *.wad  -> one small wad per map (open and save it in your map editor); all its lumps are copied
-  data/        everything else, raw (BGCLASS.txt, DEHACKED.txt, UMAPINFO.txt, ANIMATED.lmp ...)
+  data/        everything else, raw (BGCLASS.txt, DEHACKED.txt, UMAPINFO.txt, ANIMATED.lmp, voxel models *.vox ...)
   textures.txt composite wall textures (what TEXTURE1 holds), see the README
   wad.cfg      wad type: "type = IWAD" or "type = PWAD"
 
@@ -50,7 +50,7 @@ MAPPARTS = {'THINGS', 'LINEDEFS', 'SIDEDEFS', 'VERTEXES', 'SEGS', 'SSECTORS', 'N
 PALETTE_LUMPS = {'PLAYPAL', 'PLAYPAL1', 'PLAYPAL2', 'PLAYPAL3', 'PLAYPAL4', 'PLAYPAL5', 'PLAYPAL6', 'PLAYPAL7', 'PLAYPAL8', 'PLAYPAL9', 'COLORMAP', 'ENDOOM', 'GENMIDI', 'DMXGUS', 'DMXGUSC'}
 FLAT_SIZES = {4096: (64, 64), 8192: (64, 128), 16384: (128, 128), 65536: (256, 256)}
 GROUPS = ['palette', 'sprites', 'patches', 'textures', 'flats', 'graphics', 'sounds', 'music', 'colormaps', 'maps', 'data']
-RAW_EXT = {'.lmp', '.txt', '.mus', '.mid', '.midi', '.ogg', '.mp3', '.flac', '.bin', '.deh', '.bex', '.wad'}
+RAW_EXT = {'.lmp', '.txt', '.mus', '.mid', '.midi', '.ogg', '.mp3', '.flac', '.bin', '.deh', '.bex', '.wad', '.vox'}
 
 
 def natural(f):
@@ -391,6 +391,8 @@ def unpack(src, dst, merge=False, suffix_dups=False):
             put('sounds', '', name, '.wav', decode_sound(data))
         elif name.startswith(('D_', 'DP', 'MUS')) and (music_ext(data) != '.lmp' or name.startswith('D_')):
             put('music', '', name, music_ext(data), data)
+        elif data.startswith(b'VOX '):
+            put('data', '', name, '.vox', data)   # a MagicaVoxel model (voxel props)
         elif is_text(data):
             put('data', '', name, '.txt', data)
         else:

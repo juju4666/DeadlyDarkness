@@ -43,6 +43,7 @@
 #include "w_wad.h"
 #include "r_main.h"
 #include "dsda/bglight.h"
+#include "dsda/bgvoxel.h"
 #include "r_things.h"
 #include "r_plane.h"
 #include "r_bsp.h"
@@ -1116,6 +1117,7 @@ void R_RenderPlayerView (player_t* player)
   DSDA_ADD_CONTEXT(sf_setup_frame);
   R_SetupFrame (player);
   bg_LightsBeginFrame();
+  bgvox_BeginFrame();
   DSDA_REMOVE_CONTEXT(sf_setup_frame);
 
   DSDA_ADD_CONTEXT(sf_clear);

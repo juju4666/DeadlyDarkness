@@ -65,6 +65,7 @@
 #include "dsda.h"
 #include "dsda/begotten.h"
 #include "dsda/bglight.h"
+#include "dsda/bgvoxel.h"
 #include "dsda/damage_kind.h"
 #include "dsda/args.h"
 #include "dsda/compatibility.h"
@@ -3960,6 +3961,7 @@ void P_SetupLevel(int episode, int map, int skill)
 
   bg_CheckpointNewLevel();
   bg_LightsNewLevel();   // begotten: stationary lights get baked on the first frame
+  bgvox_NewLevel();      // begotten: voxel models are made again (the palette may be another one)
 
   dsda_WatchAfterLevelSetup();
 

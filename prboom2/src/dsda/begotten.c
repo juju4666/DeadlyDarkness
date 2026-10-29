@@ -62,6 +62,7 @@
 #include "dsda/bgcoop.h"
 #include "dsda/bgnet.h"
 #include "dsda/bglight.h"
+#include "dsda/bgvoxel.h"
 #include "dsda/bgprogress.h"
 #include "dsda/bgsplit.h"
 #include "dsda/key_frame.h"
@@ -2149,6 +2150,7 @@ void dsda_InitBegotten(void)
   bg_DefineMobjTypes();
   bg_DefineStates();
   dsda_InitBgRoster();
+  bgvox_Init();
   bg_InitPickups();
   bg_LightsInit();
 

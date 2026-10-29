@@ -59,6 +59,7 @@
 #include "dsda/begotten.h"
 #include "dsda/map_format.h"
 #include "dsda/aim.h"
+#include "dsda/bgvoxel.h"
 #include "dsda/bglight.h"
 #include "dsda/bgmonster.h"
 #include "s_sound.h"
@@ -990,6 +991,7 @@ static void bg_AddDynamicLights(void)
     const mobj_t* mo;
     const bg_lightdef_t* d;
     double x, y, z, fade = 1.0;
+    double vox_r, vox_s, vox_col[3];
     bg_lightdef_t tmp;
 
     if (th->function != P_MobjThinker)
@@ -998,6 +1000,20 @@ static void bg_AddDynamicLights(void)
     if ((first_type >= 0 && mo->type >= first_type && mo->type < first_type + num_defs) || mo->type < 0 ||
         mo->type >= num_mobj_types || !mo->state)
       continue;
+    if (bgvox_FrameLight(mo, &vox_r, &vox_s, vox_col))
+    {
+      // a voxel prop's explosion or burning frame (BGVOXEL `light`): a flickering point light, tinted by the model
+      tmp = dyn_explosion;
+      tmp.radius = vox_r;
+      tmp.strength = vox_s;
+      tmp.shadow = false;
+      tmp.flicker = 1;
+      tmp.flick_rate = 9.0;
+      tmp.flick_depth = 0.3;
+      bg_MobjPos(mo, &x, &y, &z);
+      bg_AddLight(&tmp, mo, x, y, z + bg_Fix(mo->height) * 0.5, 0, (unsigned) (mo->x >> 16), vox_col);
+      continue;
+    }
     if (mo->flags & MF_MISSILE)
       d = &dyn_missile;
     else if ((mobjinfo[mo->type].flags & MF_MISSILE) && mobjinfo[mo->type].deathstate > 0)
@@ -3831,7 +3847,7 @@ dboolean bg_LitSpan(draw_span_vars_t* ds)
 // Sprites
 //
 
-const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixed_t y, fixed_t z, const sector_t* sector)
+static const lighttable_t* bg_LightAt(const lighttable_t* colormap, double fx, double fy, double fz, const double* n, const sector_t* sector)
 {
   int set[BG_MAXLIGHTS];
   int i, base_row, s;
@@ -3847,12 +3863,10 @@ const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixe
     set[i] = i;
   {
     bg_acc_t a;
-    double fx = bg_Fix(x), fy = bg_Fix(y);
-
     sprite_dist = hypot(fx - bg_Fix(viewx), fy - bg_Fix(viewy));
 
     bg_AccInit(&a);
-    bg_AccLive(&a, set, num_lights, fx, fy, bg_Fix(z), NULL, s);
+    bg_AccLive(&a, set, num_lights, fx, fy, fz, n, s);
     {
       double gc[3], gs = bg_GlowAt(s, gc);
 
@@ -3867,7 +3881,7 @@ const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixe
       if (S->sun)
         bg_AccAdd(&a, bg_GridAt(&S->floor, fx, fy), S->g.col);
       else if (bg_GridAny(&S->floor, fx, fy))
-        bg_AccAdd(&a, bg_Contribution(&S->g, fx, fy, bg_Fix(z), NULL), S->g.col);
+        bg_AccAdd(&a, bg_Contribution(&S->g, fx, fy, fz, n), S->g.col);
     }
     total = bg_AccDone(&a, col);
   }
@@ -3878,6 +3892,17 @@ const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixe
     bg_FogLevel(&lv, sprite_dist, total, fog_on ? sector_zone[s] : 0, sector->lightlevel);
     return bg_KeyColormap(bg_LitKey(&lv, 0.5));
   }
+}
+
+const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixed_t y, fixed_t z, const sector_t* sector)
+{
+  return bg_LightAt(colormap, bg_Fix(x), bg_Fix(y), bg_Fix(z), NULL, sector);
+}
+
+// a voxel model's block: the same, with the direction the face looks
+const lighttable_t* bg_LightVoxel(const lighttable_t* colormap, double x, double y, double z, const double* n, const sector_t* sector)
+{
+  return bg_LightAt(colormap, x, y, z, n, sector);
 }
 
 

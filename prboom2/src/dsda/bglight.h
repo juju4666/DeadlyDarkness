@@ -36,6 +36,8 @@ dboolean bg_LitSpan(draw_span_vars_t* dsvars);
 // Sprites: the colormap a thing at this spot should use.
 const lighttable_t* bg_LightSprite(const lighttable_t* colormap, fixed_t x, fixed_t y, fixed_t z, const sector_t* sector);
 
+const lighttable_t* bg_LightVoxel(const lighttable_t* colormap, double x, double y, double z, const double* n, const sector_t* sector);
+
 double bg_LightProbe(double x, double y, double z, const double* n);   // self test
 int bg_LightProbeTint(double x, double y, double z);
 int bg_LightTestMap(int tint, int mq, int row, int idx);

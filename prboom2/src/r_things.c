@@ -35,6 +35,7 @@
 #include "w_wad.h"
 #include "r_main.h"
 #include "dsda/bglight.h"
+#include "dsda/bgvoxel.h"
 #include "r_bsp.h"
 #include "r_segs.h"
 #include "r_draw.h"
@@ -447,7 +448,7 @@ static vissprite_t *R_NewVisSprite(void)
  {
    vissprite_t* v = vissprites + num_vissprite++;
 
-   v->bg_halo = 0; v->bg_weather = 0;
+   v->bg_halo = 0; v->bg_weather = 0; v->bg_voxel = 0;
    return v;
  }
 }
@@ -743,6 +744,47 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
   // too far off the side?
   if (D_abs(tx) > ((int64_t) tz << 2))
     return;
+
+  // Begotten: a voxel prop is drawn as a model, not as a picture. It goes through the same sorting and clipping.
+  if (bg_weapons && !thing->player && thing->subsector)
+  {
+    int vx1, vx2, vi;
+    fixed_t vscale, vgz, vgzt;
+
+    vi = bgvox_Project(thing, fx, fy, fz, &vx1, &vx2, &vscale, &vgz, &vgzt);
+    if (vi)
+    {
+      vissprite_t* vv = R_NewVisSprite();
+      const lighttable_t* vcm;
+
+      R_SetSpritelights(lightlevel);
+      if (fixedcolormap)
+        vcm = fixedcolormap;
+      else
+      {
+        int vindex = (int)(((int64_t)xscale * 160 / wide_centerx) >> LIGHTSCALESHIFT);
+
+        if (vindex >= MAXLIGHTSCALE)
+          vindex = MAXLIGHTSCALE - 1;
+        vcm = spritelights[vindex];
+      }
+      vv->bg_voxel = vi;
+      vv->x1 = (short) vx1;
+      vv->x2 = (short) vx2;
+      vv->gx = fx;
+      vv->gy = fy;
+      vv->gz = vgz;
+      vv->gzt = vgzt;
+      vv->scale = vscale;
+      vv->heightsec = thing->subsector->sector->heightsec;
+      vv->mobjflags = thing->flags;
+      vv->floorclip = 0;
+      vv->texturemid = 0;
+      vv->colormap = vcm;
+      bgvox_SetBase(vi, vcm, thing->subsector->sector);
+      return;
+    }
+  }
 
     // decide which patch to use for sprite relative to player
 #ifdef RANGECHECK
@@ -1612,7 +1654,9 @@ static void R_DrawSprite (vissprite_t* spr)
 
   mfloorclip = clipbot;
   mceilingclip = cliptop;
-  if (spr->bg_halo)
+  if (spr->bg_voxel)
+    bgvox_Draw(spr->bg_voxel, mfloorclip, mceilingclip);          // Begotten: a voxel model
+  else if (spr->bg_halo)
     bg_DrawHalo(spr->bg_halo - 1, mfloorclip, mceilingclip);     // Begotten: the glow round a light
   else if (spr->bg_weather)
     bg_DrawWeather(spr->bg_weather - 1, mfloorclip, mceilingclip);  // Begotten: rain or snow

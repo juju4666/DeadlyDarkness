@@ -369,3 +369,7 @@ Bounce with several lights: each light's contribution to a sector is `bounce * h
 Bounce and shadows: the glow of a sector is blocked where the light that produced it is blocked (same rays as the light's own shadows), so shadows stay black.
 
 Which lights cast shadows: baked stationary lights (baked into floor and wall grids), placed lights with the `shadow` word (the gyros), the player's flashlight, flying projectiles and the gun's muzzle flash (menu: "Projectile And Gun Flash Shadows"). Explosions, bullet puffs, power-up glows and the lantern do not. Solid things (monsters, players, columns) block the live shadow lights too.
+
+## 0.10.69: voxel props
+
+Voxel props take part in the lighting like sprites do, but face by face: each block of a model asks the light system for its brightness and tint at a point 2 cells out from the surface, with the face's normal, so a face pointing away from a light is darker than one pointing at it (`bg_LightVoxel`). Every light that lights sprites lights them: the level's lights, the flashlight, muzzle flashes, explosions and the glow of a burning wreck. A burning model frame is itself a flickering point light (BGVOXEL `light RADIUS STRENGTH R G B`). Voxels in palette slots 241-255 are emissive and are not dimmed. See BEGOTTEN_ENGINE.md, 0.10.69.

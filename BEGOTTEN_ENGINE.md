@@ -822,3 +822,32 @@ Joining a network game that is already running (phase 4 of the co-op rules), the
 
 - Flying projectiles and the flash of the player's gun now cast shadows (rays to every lit point, like the flashlight and the gyros). A menu option "Projectile And Gun Flash Shadows" and the BGLIGHT words `missile noshadow` / `muzzle noshadow` turn them off. If the muzzle point (28 units ahead of the eye) is inside a wall, the flash comes from the eye instead, so it still lights the room.
 - Explosions (the light a projectile makes when it hits something) are 75% smaller: radius 420 -> 105, halo 80 -> 20. They do not cast shadows.
+
+## 0.10.69
+
+Voxel props: scenery made of voxels (a car, a barrel, a statue) that is placed in UDB like any thing, is lit by the level's lights, can be shot, and swaps to another model when it dies (a car that blows up and becomes a burning wreck).
+
+**Size.** One voxel is one pixel of the art: 1 / 2.5 = 0.4 map units, the same size as the pixels of the player characters (the engine's BGSCALE for sprites). A model 100 voxels long is 40 units long, as long as a 100-pixel sprite is wide. Models are at most 256 voxels per axis in MagicaVoxel; bigger objects are put together from several models in one `.vox` scene (MagicaVoxel's scene graph is read, including translation and the 90-degree rotations).
+
+**Making a model.** Build it in Blockbench, export it as OBJ/GLB, voxelize it in MagicaVoxel (import with a voxel size that gives the pixel size above), then save the `.vox`. Conventions:
+- The lowest voxel of the model stands on the floor. The thing's x/y is MagicaVoxel's world origin.
+- Forward (the way the thing faces at angle 0, east) is +x of the model; left is +y; up is +z.
+- Colours are matched to the game palette (slots 0-239). Palette slots 241-255 in MagicaVoxel mean glowing: those voxels are drawn at full brightness and are not darkened by the level light (headlights, flames).
+- Only the surface is used: voxels with all six neighbours filled are dropped when the model loads, so hollow and solid models cost the same.
+
+**BGVOXEL lump.** A text lump (put as many as you like) with two kinds of line:
+
+    prop  KEY EDNUM sprite SPRT [radius R] [height H] [health N] [mass M] [offset X Y Z]
+    model KEY FRAME LUMP [light RADIUS STRENGTH R G B] [yaw DEGREES]
+
+`prop` makes a thing type with editor number EDNUM (give it a sprite name of four letters, used only for the editor icon: `SPRT` + `A0`). It is solid and shootable. `model` gives it its looks, by frame: `A` idle, `B` the explosion, `C` and `D` the burning wreck (`D` is optional and alternates with `C`, so flames can change). `light` makes that frame a flickering point light of that radius, strength and colour. A shot-down prop plays `A` -> `B` (with the explosion sound and a radius damage like a barrel) -> `C`/`D`, and the wreck stays solid.
+
+The car is the example: it is in `begotten.wad` (the lumps `BGVOXEL`, `VXCAR`, `VXCARB`, `VXCARC`, `VXCARD` and the sprite `VCARA0`), and its source files are in `game/voxel_props` (`data/BGVOXEL.txt`, `data/voxels/*.vox`, `sprites/props/VCARA0.png`) for the content tree. Thing 21101 is in the UDB configuration under "Begotten: Voxel props". `pack_wad.py` packs `.vox` files and `BGVOXEL.txt` like any other lump. A pwad can add its own `BGVOXEL` lump and models, but must use editor numbers that are not taken.
+
+**Converter.** `tools/obj_to_vox.py model.glb VXNAME.vox` turns a Blockbench export (OBJ with its MTL and texture, glTF or GLB) straight into a `.vox`, so MagicaVoxel is optional. It samples the surface at 0.4 units per voxel, takes colours from the texture, reduces them to the palette, and puts materials with "emissive", "glow" or "light" in the name (or `--emissive WORD`, or a glTF emissive factor) into the glowing slots. `--length N` scales the model to N map units long, `--scale N` sets map units per model unit; Blockbench's Y up and -Z front are the default (`--up`, `--front` change them). It writes the model with the floor at z = 0 and the footprint centred on the thing, and prints the size in map units. Needs `pip install trimesh numpy pillow scipy`.
+
+**How it is drawn.** A model is one sprite for the sorter: it is placed among walls and monsters by its distance and clipped by the walls in front of it. Its visible cells are drawn nearest-first into a small depth buffer and then copied to the screen. Each block of 6 x 6 x 6 cells is lit once per frame per face direction with the engine's lighting (distance, sector light, every dynamic light, shadows), so lit sides and dark sides read correctly and a flashlight sweeps across a car. A model casts a cylinder shadow for its radius and height.
+
+**Cost.** Roughly 10 ms per car filling the screen on the slow test machine (the car prototype is 114,000 visible cells, much bigger than a typical prop). Cost grows with the number of visible cells and with the screen area the model covers, so keep props lean. `BGVOX_STATS=1` in the environment prints the timing once per second.
+
+**Known limits.** Collision is the cylinder (radius, height), not the model's shape. A model is only drawn while its origin is on screen. Frame lights are plain point lights (no shadows).
