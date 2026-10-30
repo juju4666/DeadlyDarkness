@@ -75,6 +75,8 @@ typedef struct {
   int foeaim;                             // percent of the normal hitscan spread monsters have against this class
   int parry;                              // parry window in tics, 0 = class cannot parry
   char face[4];                           // status bar face lump prefix, "" = stock faces
+  int facebg[9];                          // colour behind the face at full health, half health and none (r g b each)
+  dboolean has_facebg;
   int jump;                               // apex height of a jump in map units, 0 = the class cannot jump
   fixed_t jump_momz;                      // the upward speed that gives that apex (computed)
   int sound[BG_NUM_CLASS_SOUNDS];         // sfx ids replacing the stock player sounds, 0 = stock
@@ -457,6 +459,19 @@ static void bg_ParseClassLine(char* line, int lumpnum, int lineno)
     c->face[3] = '\0';
     return;
   }
+  if (!strcasecmp(tok[0], "facebg") && count == 10)
+  {
+    int i;
+
+    for (i = 0; i < 9; ++i)
+    {
+      c->facebg[i] = atoi(tok[1 + i]);
+      if (c->facebg[i] < 0 || c->facebg[i] > 255)
+        goto bad;
+    }
+    c->has_facebg = true;
+    return;
+  }
   if (!strcasecmp(tok[0], "sprite") && count >= 3)
   {
     int i;
@@ -789,6 +804,14 @@ int bg_ClassPortraitLump(int cls)
 const char* bg_ClassFacePrefix(int cls)
 {
   return cls >= 0 && cls < num_classes && classes[cls].face[0] ? classes[cls].face : NULL;
+}
+
+dboolean bg_ClassFaceBg(int cls, int* rgb)
+{
+  if (cls < 0 || cls >= num_classes || !classes[cls].has_facebg)
+    return false;
+  memcpy(rgb, classes[cls].facebg, sizeof(classes[cls].facebg));
+  return true;
 }
 
 int bg_ClassDamagePct(const player_t* player, damage_kind_t kind)

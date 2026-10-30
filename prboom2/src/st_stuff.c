@@ -1061,6 +1061,8 @@ int ST_HealthColor(int health)
     return cr_health_super;
 }
 
+static int ST_FaceBgColour(void);
+
 static void ST_drawWidgets(dboolean refresh)
 {
   int i;
@@ -1108,7 +1110,14 @@ static void ST_drawWidgets(dboolean refresh)
   for (i=0;i<6;i++)
     STlib_updateMultIcon(&w_arms[i], refresh);
 
-  STlib_updateMultIcon(&w_faces, refresh);
+  {
+    static int last_bg = -2;
+    int bgc = ST_FaceBgColour();
+    dboolean moved = bgc != last_bg;     // the colour behind the face moved a step: draw the face again
+
+    last_bg = bgc;
+    STlib_updateMultIcon(&w_faces, refresh || moved);
+  }
 
   if (!bg_weapons)
     for (i=0;i<3;i++)
@@ -1172,6 +1181,50 @@ void ST_Drawer(dboolean refresh)
 
 
 
+
+// Begotten: the colour behind the face follows the player's health: dark green when well, through amber to bright red as
+// the health runs out (the class can set its own three colours with BGCLASS `facebg`). It shows where the face picture is
+// transparent. Returns a palette index, or -1 when it is off. Gold while invulnerable.
+static int ST_FaceBgColour(void)
+{
+  static const int stock[9] = { 14, 64, 28,  170, 130, 24,  235, 24, 24 };
+  int rgb[9], i, r, g, b;
+  double t, f;
+  int health;
+
+  if (!bg_weapons || raven || !dsda_IntConfig(dsda_config_begotten_face_health_bg))
+    return -1;
+  if (st_faceindex == ST_GODFACE)
+    return bg_PaletteNearestFlat(150, 120, 20);
+  if (!bg_ClassFaceBg(players[displayplayer].bgclass, rgb))
+    memcpy(rgb, stock, sizeof(rgb));
+  health = plyr->health < 0 ? 0 : plyr->health > 100 ? 100 : plyr->health;
+  t = 1.0 - health / 100.0;                       // 0 well .. 1 dead
+  if (t < 0.5)
+  {
+    f = t * 2.0;
+    for (i = 0; i < 3; ++i)
+      rgb[i] = (int) (rgb[i] + (rgb[3 + i] - rgb[i]) * f + 0.5);
+  }
+  else
+  {
+    f = (t - 0.5) * 2.0;
+    for (i = 0; i < 3; ++i)
+      rgb[i] = (int) (rgb[3 + i] + (rgb[6 + i] - rgb[3 + i]) * f + 0.5);
+  }
+  r = rgb[0];
+  g = rgb[1];
+  b = rgb[2];
+  return bg_PaletteNearestFlat(r, g, b);
+}
+
+static void ST_FaceUnderlay(int x, int y, int w, int h)
+{
+  int c = ST_FaceBgColour();
+
+  if (c >= 0)
+    bg_FillSlot(x, y, w, h, VPT_STRETCH | VPT_ALIGN_BOTTOM, c);
+}
 
 // Begotten: a face picture bigger than the slot (35 x 32) fills the slot, whatever its size (bgface.c shrinks it to the
 // screen's resolution): its patchnum says the slot's size so that the bar redraws the right area.
@@ -1410,6 +1463,7 @@ static void ST_createWidgets(void)
                      faces,
                      &st_faceindex,
                      &st_statusbaron);
+  w_faces.underlay = ST_FaceUnderlay;
 
   // armor percentage - should be colored later
   STlib_initPercent(&w_armor,

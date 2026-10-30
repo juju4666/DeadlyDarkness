@@ -111,6 +111,10 @@ typedef struct
   // user data
   int     data;
 
+  // Begotten: called after the old icon is erased and before the new one is drawn, with the icon's box
+  // (status bar coordinates); used to put a colour behind the status face
+  void    (*underlay)(int x, int y, int w, int h);
+
 } st_multicon_t;
 
 //

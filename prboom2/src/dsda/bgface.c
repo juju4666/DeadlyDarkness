@@ -305,6 +305,63 @@ dboolean bg_DrawFitPatch(int lump, int x, int y, int w, int h, int flags)
   return true;
 }
 
+int bg_PaletteNearest(int r, int g, int b)
+{
+  check_palette();
+  r = r < 0 ? 0 : r > 255 ? 255 : r;
+  g = g < 0 ? 0 : g > 255 ? 255 : g;
+  b = b < 0 ? 0 : b > 255 ? 255 : b;
+  return nearest_cached(r, g, b);
+}
+
+// For a flat colour: any palette colour (the glow ramps too: the status bar is not lit), judged on colour as much as on
+// brightness, so that a dark green falls on the most greenish dark colour the palette has and not on a grey.
+int bg_PaletteNearestFlat(int r, int g, int b)
+{
+  int i, best = 0;
+  double bd = 1e30, lt = (r + g + b) / 3.0;
+
+  check_palette();
+  for (i = 0; i < 255; ++i)
+  {
+    double pr = fit_pal[i * 3], pg = fit_pal[i * 3 + 1], pb = fit_pal[i * 3 + 2], pl = (pr + pg + pb) / 3.0;
+    double d = 3 * (pr - r) * (pr - r) + 4 * (pg - g) * (pg - g) + 2 * (pb - b) * (pb - b);
+
+    d += 6.0 * (((pr - pl) - (r - lt)) * ((pr - pl) - (r - lt)) + ((pg - pl) - (g - lt)) * ((pg - pl) - (g - lt)) +
+                ((pb - pl) - (b - lt)) * ((pb - pl) - (b - lt)));
+    if (d < bd)
+    {
+      bd = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+void bg_FillSlot(int x, int y, int w, int h, int flags, int colour)
+{
+  stretch_param_t* params;
+  int sx, sy, sw, sh, iy;
+
+  if (!V_IsSoftwareMode())
+    return;
+  params = dsda_StretchParams(flags);
+  sx = params->video->x1lookup[x];
+  sy = params->video->y1lookup[y];
+  sw = params->video->x2lookup[x + w - 1] - sx + 1;
+  sh = params->video->y2lookup[y + h - 1] - sy + 1;
+  sx += params->deltax1;
+  sy += params->deltay1;
+  if (sx < 0) { sw += sx; sx = 0; }
+  if (sy < 0) { sh += sy; sy = 0; }
+  if (sx + sw > SCREENWIDTH) sw = SCREENWIDTH - sx;
+  if (sy + sh > SCREENHEIGHT) sh = SCREENHEIGHT - sy;
+  if (sw <= 0 || sh <= 0)
+    return;
+  for (iy = 0; iy < sh; ++iy)
+    memset(screens[0].data + (size_t) (sy + iy) * screens[0].pitch + sx, colour, (size_t) sw);
+}
+
 // ---- self test: a made-up palette and picture ----
 
 int bg_FitSelfTest(char* msg, size_t msglen)

@@ -1028,6 +1028,10 @@ dsda_config_t dsda_config[dsda_config_count] = {
     "begotten_effect_shadows", dsda_config_begotten_effect_shadows,
     CONF_BOOL(1), NULL, NOT_STRICT
   },
+  [dsda_config_begotten_face_health_bg] = {
+    "begotten_face_health_bg", dsda_config_begotten_face_health_bg,
+    CONF_BOOL(1), NULL, NOT_STRICT
+  },
   [dsda_config_begotten_thing_shadows] = {
     "begotten_thing_shadows", dsda_config_begotten_thing_shadows,
     CONF_BOOL(1), NULL, NOT_STRICT

@@ -93,6 +93,9 @@ void dsda_BgPoseSelfTest(void);
 int bg_ClassSprite(int cls, int sprite, int frame);
 // Prefix (3 letters) of the class' status bar face lumps, NULL for the stock faces.
 const char* bg_ClassFacePrefix(int cls);
+// The colours behind the class' status bar face (BGCLASS `facebg`): r g b at full health, at half health and at none.
+// False if the class does not set them (the engine's own colours are used).
+dboolean bg_ClassFaceBg(int cls, int* rgb);
 // Lump number of the class' standing player sprite (front view), -1 if there is none.
 int bg_ClassPortraitLump(int cls);
 

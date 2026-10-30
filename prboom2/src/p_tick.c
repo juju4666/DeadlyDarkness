@@ -339,6 +339,8 @@ void P_Ticker (void)
     dsda_BegottenCoopTest();
   if (getenv("BEGOTTEN_SELFTEST") && *getenv("BEGOTTEN_SELFTEST") == 'S' && playeringame[0] && players[0].mo)
     dsda_BegottenSpectateTest();
+  if (leveltime == 5 && getenv("BEGOTTEN_HEALTH") && playeringame[0] && players[0].mo)
+    players[0].health = players[0].mo->health = atoi(getenv("BEGOTTEN_HEALTH"));   // developer aid: start with this health
   if (leveltime == 5 && getenv("BEGOTTEN_TELEPORT") && playeringame[0] && players[0].mo)
     dsda_BegottenDevTeleport();   // developer: BEGOTTEN_TELEPORT="x y angle" puts player 1 there
   if (getenv("BEGOTTEN_FLASH") && playeringame[0] && players[0].mo)

@@ -258,6 +258,7 @@ void STlib_initMultIcon
   i->inum = inum;
   i->on = on;
   i->p  = il;
+  i->underlay = NULL;
 }
 
 //
@@ -299,6 +300,9 @@ void STlib_updateMultIcon
     {
       const patchnum_t* pn = &mi->p[*mi->inum];
       const rpatch_t* rp = R_PatchByNum(pn->lumpnum);
+
+      if (mi->underlay)
+        mi->underlay(mi->x - pn->leftoffset, mi->y - pn->topoffset, pn->width, pn->height);
 
       // Begotten: a picture bigger than its slot (a status face made from a photograph) is shrunk to the slot at the
       // resolution of the screen; the slot's size is what the patchnum says (see ST_FitFace)

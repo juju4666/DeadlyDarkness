@@ -315,6 +315,7 @@ typedef enum {
   dsda_config_begotten_flashlight_shadows,
   dsda_config_begotten_thing_shadows,
   dsda_config_begotten_effect_shadows,
+  dsda_config_begotten_face_health_bg,
   dsda_config_begotten_bounce,
   dsda_config_begotten_dev_unlock,
   dsda_config_begotten_menu_rev,
