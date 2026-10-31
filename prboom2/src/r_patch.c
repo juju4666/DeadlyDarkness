@@ -465,7 +465,9 @@ static void createPatch(int id) {
   }
 
   // work out how much memory we need to allocate for this patch's data
-  pixelDataSize = ((patch->width * patch->height + 4) & ~3) * sizeof(pixel_t);
+  // the column drawers may read up to a column's height beyond the last column (the texture wraps at the patch
+  // height, from a post that does not start at row 0): that slack is zero, so it is a valid colour index
+  pixelDataSize = ((patch->width * patch->height + patch->height + 4) & ~3) * sizeof(pixel_t);
   columnsDataSize = sizeof(rcolumn_t) * patch->width;
 
   // count the number of posts in each column
@@ -654,7 +656,8 @@ static void createTextureCompositePatch(int id) {
   composite_patch->flags = 0;
 
   // work out how much memory we need to allocate for this patch's data
-  pixelDataSize = ((composite_patch->width * composite_patch->height + 4) & ~3) * sizeof(pixel_t);
+  // slack after the last column, see createPatch
+  pixelDataSize = ((composite_patch->width * composite_patch->height + composite_patch->height + 4) & ~3) * sizeof(pixel_t);
   columnsDataSize = sizeof(rcolumn_t) * composite_patch->width;
 
   // count the number of posts in each column

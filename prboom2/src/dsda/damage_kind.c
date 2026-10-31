@@ -346,7 +346,12 @@ void dsda_DamageKindLiveTest(void)
   caco = P_SpawnMobj(player->x + (200 << FRACBITS), player->y, player->z, MT_BORE);
   CHECK(caco != NULL, "spawned a cacodemon");
 
-  // cacodemon: shells 150%
+  // cacodemon: shells 150%, bullets 75% (set here: the shipped balance table changes with the game's roster)
+  {
+    char line[] = "vulnerability ednum 3005 shell 150 bullet 75";
+
+    dsda_ParseLine(line, 0, 1);
+  }
   players[0].readyweapon = wp_shotgun;
   before = caco->health;
   P_DamageMobj(caco, NULL, player, 20);
@@ -371,7 +376,7 @@ void dsda_DamageKindLiveTest(void)
     CHECK(before - caco->health == 20, "rocket: fire has no entry for the cacodemon, unchanged");
   }
 
-  // revenant (66): firearm 80, magic 130
+  // revenant (66): firearm and magic as in the shipped table (90 and 125 now)
   {
     int rev = -1;
     mobj_t* r;
@@ -382,12 +387,12 @@ void dsda_DamageKindLiveTest(void)
     players[0].readyweapon = wp_pistol;
     before = r->health;
     P_DamageMobj(r, NULL, player, 20);
-    CHECK(before - r->health == 16, "revenant: firearm 80%");
+    CHECK(before - r->health == 18, "revenant: firearm 90%");
     {
       mobj_t* plasma = P_SpawnMobj(player->x, player->y, player->z, MT_PLASMA);
       before = r->health;
       P_DamageMobj(r, plasma, player, 20);
-      CHECK(before - r->health == 26, "revenant: fire (magic) 130%");
+      CHECK(before - r->health == 25, "revenant: fire (magic) 125%");
     }
   }
 
@@ -412,6 +417,7 @@ void dsda_DamageKindSelfTest(void)
   memset(&rocket, 0, sizeof(rocket));
   memset(&shooter, 0, sizeof(shooter));
   memset(&fake, 0, sizeof(fake));
+  fake.bgclass = -1;   // no class: class multipliers are tested elsewhere, here every number is exact
   memset(&bullet_inflictor, 0, sizeof(bullet_inflictor));
   shooter.player = &fake;
   shooter.type = MT_PLAYER;

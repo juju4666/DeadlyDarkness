@@ -576,14 +576,15 @@ void dsda_BgSplitSelfTest(void)
   // new game: players are created from the configuration
   netgame = false;
   bg_made_netgame = false;
-  dsda_UpdateIntConfig(dsda_config_begotten_local_players, 3, false);
+  bg_split_request = 3;      // the menus ask for the players (the saved count is only for the menus)
   bg_SplitNewGame();
   SCHECK(playeringame[0] && playeringame[1] && playeringame[2] && !playeringame[3], "split: three local players");
   SCHECK(netgame, "split: local co-op runs as a co-op game");
   SCHECK(bg_player_class[1] == bg_SplitClassFor(1), "split: player 2 gets the class chosen for player 2");
-  dsda_UpdateIntConfig(dsda_config_begotten_local_players, 1, false);
+  bg_split_request = 1;
   bg_SplitNewGame();
   SCHECK(playeringame[0] && !playeringame[1] && !netgame, "split: back to one player");
+  bg_split_request = 0;
 
   // the first controller can be given to another local player (for testing with one controller)
   {

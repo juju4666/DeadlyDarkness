@@ -891,3 +891,14 @@ The software renderer now draws with a palette of **512 colours** instead of 256
 ## 0.11.3
 
 - **Witch faces smaller and lower again:** the head is another 15% smaller (eyes to mouth 49.1 px) and the middle of eyes and mouth sits lower in the box (y 106 instead of 93), so more of the top of the head and hair shows and less of the clothes. `layout.py <photos> landmarks.json <out> 49.1 106` regenerates them.
+
+## 0.11.4
+
+- **Fix: crash when sprites were drawn (seen while shooting fireballs).** The column drawers can read up to one patch height past the last column of a patch (the texture wraps at the patch height, from a post that does not start at row 0). With 8-bit pixels the bytes found there were always a valid colour index; with 16-bit pixels they were the patch's column table, i.e. a colour index of tens of thousands, and the colormap lookup left its table. Every patch and composite texture now has a zeroed slack of one column height after its pixels.
+
+## 0.11.5
+
+No change to the game itself; the self tests were brought up to date and the 512-colour code was audited.
+
+- **Audit.** A memory-checked (AddressSanitizer) build was played through all 32 maps of `begotten.wad` as the witch, with every weapon fired in primary and secondary mode, plus maps 1 and 10 as the other two classes: no memory error other than one read of a lump name one byte past its end at start-up (in the original lump hash code, harmless). The 32-bit `long` of Windows was checked for every place the new colour code uses `long`: the only one that could overflow was the one fixed in 0.11.1.
+- **Self tests fixed.** The split-screen test still set the old saved player count (`bg_split_request` is what the menus set now), so three of its checks failed; the damage-multiplier tests assumed an old balance table (revenant firearm 80 / magic 130, a cacodemon entry) and a class-less player. They all pass now (`BEGOTTEN_SELFTEST=1`, `2`, `3`, and `8` / `9` with `BEGOTTEN_LOCALPLAYERS=2`). `BEGOTTEN_SELFTEST=4` (parry, thunderclap, blade, air control) needs a bigger test room than `MAP01` and fails the same way on 0.10.71, so it is not a result of the colour work.
