@@ -29,7 +29,7 @@
  *-----------------------------------------------------------------------------*/
 
 #if (R_DRAWCOLUMN_PIPELINE & RDC_TRANSLUCENT)
-#define GETDESTCOLOR(col1, col2) (temptranmap[((col1)<<8)+(col2)])
+#define GETDESTCOLOR(col1, col2) (temptranmap[((col1)<<BG_COLORBITS)+(col2)])
 #else
 #define GETDESTCOLOR(col) (col)
 #endif
@@ -47,7 +47,7 @@ static void R_FLUSHWHOLE_FUNCNAME(void)
 #if (R_DRAWCOLUMN_PIPELINE & RDC_FUZZ)
 {
     int yl, yh, count, lines;
-    byte *dest;
+    pixel_t *dest;
 
     if ((temp_x + startx) % fuzzcellsize)
     {
@@ -80,7 +80,7 @@ static void R_FLUSHWHOLE_FUNCNAME(void)
     do
     {
         int mask;
-        byte fuzz;
+        pixel_t fuzz;
 
         count -= lines;
 
@@ -93,11 +93,14 @@ static void R_FLUSHWHOLE_FUNCNAME(void)
         lines += count & mask;
         count &= ~mask;
 
-        fuzz = fullcolormap[6 * 256 + dest[fuzzoffset[fuzzpos]]];
+        fuzz = fullcolormap[6 * BG_NUMCOLORS + dest[fuzzoffset[fuzzpos]]];
 
         do
         {
-            memset(dest, fuzz, fuzzcellsize);
+            int fz;
+
+            for (fz = 0; fz < fuzzcellsize; ++fz)
+                dest[fz] = fuzz;
             dest += drawvars.pitch;
         } while (--lines);
 
@@ -113,14 +116,17 @@ static void R_FLUSHWHOLE_FUNCNAME(void)
    // draw one extra line using only pixels of that line and the one above
    if (fuzz_cutoff)
    {
-      const byte fuzz = fullcolormap[6 * 256 + dest[(fuzzoffset[fuzzpos] - drawvars.pitch) / 2]];
-      memset(dest, fuzz, fuzzcellsize);
+      const pixel_t fuzz = fullcolormap[6 * BG_NUMCOLORS + dest[(fuzzoffset[fuzzpos] - drawvars.pitch) / 2]];
+      int fz;
+
+      for (fz = 0; fz < fuzzcellsize; ++fz)
+         dest[fz] = fuzz;
    }
 }
 #else
 {
-   byte *source;
-   byte *dest;
+   pixel_t *source;
+   pixel_t *dest;
    int  count, yl;
 
    while(--temp_x >= 0)
@@ -155,8 +161,8 @@ static void R_FLUSHWHOLE_FUNCNAME(void)
 //
 static void R_FLUSHHEADTAIL_FUNCNAME(void)
 {
-   byte *source;
-   byte *dest;
+   pixel_t *source;
+   pixel_t *dest;
    int count, colnum = 0;
    int yl, yh;
 
@@ -218,8 +224,8 @@ static void R_FLUSHHEADTAIL_FUNCNAME(void)
 
 static void R_FLUSHQUAD_FUNCNAME(void)
 {
-   byte *source;
-   byte *dest;
+   pixel_t *source;
+   pixel_t *dest;
    int count;
 
    #if (R_DRAWCOLUMN_PIPELINE & RDC_FUZZ)
@@ -238,27 +244,15 @@ static void R_FLUSHQUAD_FUNCNAME(void)
       dest[1] = GETDESTCOLOR(dest[1], source[1]);
       dest[2] = GETDESTCOLOR(dest[2], source[2]);
       dest[3] = GETDESTCOLOR(dest[3], source[3]);
-      source += 4 * sizeof(byte);
-      dest += drawvars.pitch * sizeof(byte);
+      source += 4;
+      dest += drawvars.pitch;
    }
 #else
-   if ((sizeof(int) == 4) && (((intptr_t)source % 4) == 0) && (((intptr_t)dest % 4) == 0)) {
-      while(--count >= 0)
-      {
-         *(int *)dest = *(int *)source;
-         source += 4 * sizeof(byte);
-         dest += drawvars.pitch * sizeof(byte);
-      }
-   } else {
-      while(--count >= 0)
-      {
-         dest[0] = source[0];
-         dest[1] = source[1];
-         dest[2] = source[2];
-         dest[3] = source[3];
-         source += 4 * sizeof(byte);
-         dest += drawvars.pitch * sizeof(byte);
-      }
+   while(--count >= 0)
+   {
+      memcpy(dest, source, 4 * sizeof(pixel_t));
+      source += 4;
+      dest += drawvars.pitch;
    }
 #endif
 }

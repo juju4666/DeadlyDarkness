@@ -61,7 +61,7 @@
 typedef struct
 {
   unsigned short x, y, z;
-  byte col;                    // palette index (lit through the colormap)
+  pixel_t col;                 // palette index (lit through the colormap)
   byte faces;                  // open faces: 1 +x, 2 -x, 4 +y, 8 -y, 16 +z, 32 -z
   unsigned int blk;            // lighting block
 } vcell_t;
@@ -119,15 +119,20 @@ static unsigned int rd32(const byte* p)
 
 // the game palette index closest to a colour: the ordinary colours (0..239), or the glow ramps (240..254) for the
 // emissive slots of the .vox palette (slots 241..255). Index 255 is never used.
-static byte vox_Nearest(const byte* pal, int r, int g, int b, dboolean glow)
+static pixel_t vox_Nearest(const byte* pal, int r, int g, int b, dboolean glow)
 {
-  int i, best = glow ? 240 : 0, lo = glow ? 240 : 0, hi = glow ? 255 : 240;
+  int i, best = glow ? 240 : 0;
   long bd = 1L << 30;
 
-  for (i = lo; i < hi; ++i)
+  for (i = 0; i < BG_NUMCOLORS; ++i)
   {
-    long dr = pal[i * 3] - r, dg = pal[i * 3 + 1] - g, db = pal[i * 3 + 2] - b;
-    long d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+    int base = i & 255;      // the extra colours of a wide palette sit in the same rows as the originals
+    long dr, dg, db, d;
+
+    if (glow ? (base < 240 || base == 255) : base >= 240)
+      continue;
+    dr = pal[i * 3] - r; dg = pal[i * 3 + 1] - g; db = pal[i * 3 + 2] - b;
+    d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
 
     if (d < bd)
     {
@@ -135,7 +140,7 @@ static byte vox_Nearest(const byte* pal, int r, int g, int b, dboolean glow)
       best = i;
     }
   }
-  return (byte) best;
+  return (pixel_t) best;
 }
 
 // ---- reading the file: models, and the scene graph that places them (MagicaVoxel splits anything bigger than 256 cells
@@ -241,7 +246,6 @@ typedef struct
   int sx, sy, sz;
   byte* occ;
   byte* colour;
-  const byte* map;
 } vfill_t;
 
 static void vox_Walk(int id, const int M[3][3], const int t[3], vfill_t* f, int depth)
@@ -308,7 +312,7 @@ static void vox_Walk(int id, const int M[3][3], const int t[3], vfill_t* f, int 
             long at = ((long) gz * f->sy + gy) * f->sx + gx;
 
             f->occ[at] = 1;
-            f->colour[at] = f->map[v[3]];
+            f->colour[at] = v[3];                 // the .vox palette slot; the game colour is looked up when the cells are made
           }
         }
       }
@@ -323,7 +327,7 @@ static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
   int sx = 0, sy = 0, sz = 0, pos, i, ok = 1;
   byte* occ;
   byte* colour;
-  byte map[256];
+  pixel_t map[256];
   int B = BGVOX_BLOCK, bx, by, bz, *blkid;
   long total;
   vfill_t F;
@@ -529,7 +533,6 @@ static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
   F.sz = sz;
   F.occ = occ;
   F.colour = colour;
-  F.map = map;
   vox_Walk(root, ident, zero, &F, 0);
   free(vnodes); free(kids); free(mods);
   vnodes = NULL; kids = mods = NULL;
@@ -593,7 +596,7 @@ static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
           c->x = (unsigned short) x;
           c->y = (unsigned short) y;
           c->z = (unsigned short) z;
-          c->col = colour[at];
+          c->col = map[colour[at]];
           c->faces = (byte) faces;
           c->blk = (unsigned int) blkid[b];
         }
@@ -652,7 +655,7 @@ static vmodel_t* vox_Get(int index)
   if (m->tried)
     return m->ok ? m : NULL;
   m->tried = true;
-  pal = V_GetPlaypal();
+  pal = V_GetColorPalette();
   ln = W_CheckNumForName(m->lump);
   if (ln < 0 || !pal)
   {
@@ -975,7 +978,7 @@ static double now_ms(void)
 }
 
 static float* zbuf;
-static byte* pbuf;
+static pixel_t* pbuf;
 static size_t zcap;
 static const lighttable_t** lcache;
 static size_t lcap;
@@ -1143,7 +1146,7 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
     free(zbuf);
     free(pbuf);
     zbuf = malloc(need * sizeof(float));
-    pbuf = malloc(need);
+    pbuf = malloc(need * sizeof(pixel_t));
     zcap = need;
   }
   {
@@ -1248,7 +1251,7 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
     }
 
     {
-      byte pix = cm[c->col];
+      pixel_t pix = cm[c->col];
       int yy, xx;
 
       if (px0 == px1 && py0 == py1)

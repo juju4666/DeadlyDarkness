@@ -49,6 +49,10 @@
 #include "dsda/configuration.h"
 #include "dsda/map_format.h"
 #include "dsda/utility.h"
+#include "v_video.h"
+#include "dsda/bgcolor.h"
+#include "dsda/bglight.h"
+#include "dsda/tranmap.h"
 
 //
 // Graphics.
@@ -103,10 +107,76 @@ int       *flattranslation;             // for global animation
 int       *texturetranslation;
 
 //
+// R_GetFlatPixels
+//
+// Returns a flat (floor/ceiling tile, or any raw 8-bit-indexed lump) as pixel_t
+// indices. Legacy lumps are widened once and cached; (index i -> i).
+//
+
+static const pixel_t **flat_pixel_cache;
+static int flat_pixel_cache_size;
+
+// A flat for the wide palette is a lump "BGW1" followed by the 16-bit little-endian palette indices of the flat (a square
+// of 64, 128, 256 ... pixels, left to right, top to bottom), as the lump of a classic flat is the bytes of the same.
+static dboolean R_IsWideFlat(int lump)
+{
+  int len = W_LumpLength(lump);
+
+  return len > 4 && ((len - 4) & 1) == 0 && !memcmp(W_LumpByNum(lump), "BGW1", 4);
+}
+
+// the number of pixels of a flat
+int R_FlatPixelCount(int lump)
+{
+  return R_IsWideFlat(lump) ? (W_LumpLength(lump) - 4) / 2 : W_LumpLength(lump);
+}
+
+const pixel_t *R_GetFlatPixels(int lump)
+{
+  int i, len;
+  const byte *src;
+  pixel_t *dst;
+
+  if (lump < 0 || lump >= numlumps)
+    I_Error("R_GetFlatPixels: bad lump %d", lump);
+
+  if (flat_pixel_cache_size < numlumps)
+  {
+    int old = flat_pixel_cache_size;
+    flat_pixel_cache = realloc((void*)flat_pixel_cache, numlumps * sizeof(*flat_pixel_cache));
+    memset((void*)(flat_pixel_cache + old), 0, (numlumps - old) * sizeof(*flat_pixel_cache));
+    flat_pixel_cache_size = numlumps;
+  }
+
+  if (flat_pixel_cache[lump])
+    return flat_pixel_cache[lump];
+
+  src = W_LumpByNum(lump);
+  if (R_IsWideFlat(lump))
+  {
+    len = (W_LumpLength(lump) - 4) / 2;
+    dst = malloc((len + 1) * sizeof(pixel_t));
+    for (i = 0; i < len; i++)
+      dst[i] = (pixel_t) ((src[4 + 2 * i] | (src[5 + 2 * i] << 8)) & (BG_NUMCOLORS - 1));
+  }
+  else
+  {
+    len = W_LumpLength(lump);
+    dst = malloc((len + 1) * sizeof(pixel_t));
+    for (i = 0; i < len; i++)
+      dst[i] = src[i];
+  }
+  dst[len] = 0;
+
+  flat_pixel_cache[lump] = dst;
+  return dst;
+}
+
+//
 // R_GetTextureColumn
 //
 
-const byte *R_GetTextureColumn(const rpatch_t *texpatch, int col) {
+const pixel_t *R_GetTextureColumn(const rpatch_t *texpatch, int col) {
   const int width = texpatch->width;
   const unsigned int mask = texpatch->widthmask;
 
@@ -398,10 +468,22 @@ static void R_InitSpriteLumps(void)
 // killough 4/4/98: Add support for C_START/C_END markers
 //
 
+// The colormaps are made of the colormap lumps of the wad (rows of 256 indices, one per light level; the legacy format)
+// widened to the whole palette (BG_NUMCOLORS entries per row, see dsda/bgcolor.h), then faded to black in their darkest
+// rows. They are indices that mean "the same colour, darker", so they are made relative to the reference palette and do not
+// change with the palette in use.
+void R_UpdatePaletteTables(void)
+{
+  extern void V_ResetFlexTranTable(void);
+
+  bg_PaletteChanged();
+  V_ResetFlexTranTable();
+}
+
 static void R_InitColormaps(void)
 {
   int i;
-  extern const byte* colormap_lump;
+  extern const pixel_t* colormap_lump;
   // MAP_FORMAT_TODO: not sure about this
   if (hexen)
   {
@@ -416,30 +498,23 @@ static void R_InitColormaps(void)
     numcolormaps = lastcolormaplump - firstcolormaplump;
   }
   colormaps = Z_Malloc(sizeof(*colormaps) * numcolormaps);
-  colormap_lump = W_LumpByName("COLORMAP");
-  colormaps[0] = (const lighttable_t *)colormap_lump;
-  for (i=1; i<numcolormaps; i++)
-    colormaps[i] = (const lighttable_t *)W_LumpByNum(i+firstcolormaplump);
+  for (i=0; i<numcolormaps; i++)
   {
-    // Begotten: private copies whose darkest rows fade to black (a sector at light 0 is pitch black)
-    const byte* pal = W_LumpByName("PLAYPAL");
-    int len;
+    int lump = (i == 0) ? W_GetNumForName("COLORMAP") : i + firstcolormaplump;
+    int len = W_LumpLength(lump);
+    int rows = len / 256;
+    pixel_t* wide;
 
-    for (i=0; i<numcolormaps; i++)
-    {
-      len = W_LumpLength(i == 0 ? W_GetNumForName("COLORMAP") : i+firstcolormaplump);
-      if (len >= 32 * 256)
-      {
-        byte* copy = Z_Malloc(len);
+    if (rows < 1)
+      I_Error("R_InitColormaps: colormap lump %d is too small", lump);
 
-        memcpy(copy, colormaps[i], len);
-        bg_FadeColormap(copy, pal);
-        colormaps[i] = (const lighttable_t *)copy;
-        if (i == 0)
-          colormap_lump = copy;
-      }
-    }
+    wide = Z_Malloc((size_t) rows * BG_NUMCOLORS * sizeof(pixel_t));
+    bg_WidenColormap(W_LumpByNum(lump), rows, wide);
+    if (rows >= 32)
+      bg_FadeColormap(wide, bg_ReferencePalette());   // Begotten: a sector at light 0 is pitch black
+    colormaps[i] = wide;
   }
+  colormap_lump = colormaps[0];
   // cph - always lock
 }
 

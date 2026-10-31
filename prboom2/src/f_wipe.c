@@ -84,7 +84,7 @@ static int wipe_initMelt(int ticks)
     for(i=0;i<SCREENHEIGHT;i++)
     memcpy(wipe_scr.data+i*wipe_scr.pitch,
            wipe_scr_start.data+i*wipe_scr_start.pitch,
-           SCREENWIDTH);
+           SCREENWIDTH * sizeof(pixel_t));
   }
 
   // setup initial column positions (y<0 => not ready to scroll yet)
@@ -115,7 +115,7 @@ static int wipe_doMelt(int ticks)
         continue;
       }
       if (y_lookup[i] < SCREENHEIGHT) {
-        byte *s, *d;
+        pixel_t *s, *d;
         int j, dy;
 
         /* cph 2001/07/29 -

@@ -47,7 +47,7 @@ END = {'S_END', 'SS_END', 'P_END', 'PP_END', 'P1_END', 'P2_END', 'P3_END', 'F_EN
        'F3_END', 'C_END'}
 MAPPARTS = {'THINGS', 'LINEDEFS', 'SIDEDEFS', 'VERTEXES', 'SEGS', 'SSECTORS', 'NODES', 'SECTORS', 'REJECT',
             'BLOCKMAP', 'BEHAVIOR', 'SCRIPTS', 'ZNODES', 'GL_VERT', 'GL_SEGS', 'GL_SSECT', 'GL_NODES', 'GL_PVS'}
-PALETTE_LUMPS = {'PLAYPAL', 'PLAYPAL1', 'PLAYPAL2', 'PLAYPAL3', 'PLAYPAL4', 'PLAYPAL5', 'PLAYPAL6', 'PLAYPAL7', 'PLAYPAL8', 'PLAYPAL9', 'COLORMAP', 'ENDOOM', 'GENMIDI', 'DMXGUS', 'DMXGUSC'}
+PALETTE_LUMPS = {'PLAYPAL', 'PLAYPAL1', 'PLAYPAL2', 'PLAYPAL3', 'PLAYPAL4', 'PLAYPAL5', 'PLAYPAL6', 'PLAYPAL7', 'PLAYPAL8', 'PLAYPAL9', 'PLAYPALX', 'PLAYPAL1X', 'PLAYPAL2X', 'PLAYPAL3X', 'COLORMAP', 'ENDOOM', 'GENMIDI', 'DMXGUS', 'DMXGUSC'}
 FLAT_SIZES = {4096: (64, 64), 8192: (64, 128), 16384: (128, 128), 65536: (256, 256)}
 GROUPS = ['palette', 'sprites', 'patches', 'textures', 'flats', 'graphics', 'sounds', 'music', 'colormaps', 'maps', 'data']
 RAW_EXT = {'.lmp', '.txt', '.mus', '.mid', '.midi', '.ogg', '.mp3', '.flac', '.bin', '.deh', '.bex', '.wad', '.vox'}
@@ -104,7 +104,13 @@ def lumpname(stem):
 
 # ---------------------------------------------------------------- pictures
 def decode_patch(b, pal):
-    """Doom picture -> (RGBA image, left, top) or None if it is not a valid picture."""
+    """Doom picture -> (RGBA image, left, top) or None if it is not a valid picture. A wide picture ("BGW1") has
+    16-bit indices and needs the 512-colour palette."""
+    wide = b[:4] == WIDE_MAGIC
+    if wide:
+        b = b[4:]
+        if len(pal) < 512:
+            return None
     if len(b) < 8:
         return None
     w, h, lo, to = struct.unpack('<hhhh', b[:8])
@@ -125,11 +131,18 @@ def decode_patch(b, pal):
             if o + 3 > len(b):
                 return None
             ln = b[o + 1]
-            if o + 4 + ln > len(b) or top + ln > h:
+            step = 2 + 2 * ln if wide else 4 + ln
+            if o + step > len(b) or top + ln > h:
                 return None
             for k in range(ln):
-                px[x, top + k] = pal[b[o + 3 + k]] + (255,)
-            o += ln + 4
+                if wide:
+                    v = b[o + 2 + 2 * k] | (b[o + 3 + 2 * k] << 8)
+                    if v >= len(pal):
+                        return None
+                else:
+                    v = b[o + 3 + k]
+                px[x, top + k] = pal[v] + (255,)
+            o += step
     return img, lo, to
 
 
@@ -157,23 +170,53 @@ def png_offsets(d):
     return None
 
 
+WIDE_MAGIC = b'BGW1'
+
+
+def extra_pair(i):
+    """the partner of colour i for the in-between colour 256 + i (the engine's bg_ExtraPair, lightness mode)"""
+    row, col = (i >> 4) & 15, i & 15
+    if i == 255:
+        return 255
+    if row == 15:
+        return i + 1 if i < 254 else i - 1
+    if row == 0:
+        return i + 1 if col < 15 else i - 1
+    return i + 1 if col < 15 else 0
+
+
 class Palette:
-    def __init__(self, data):
+    """The 512 colours of the engine's wide palette: the 256 colours of PLAYPAL, then 256 in-between colours (the middle of
+    colour i and extra_pair(i)) unless `extra` (a PLAYPALX lump) paints them. wide=False gives the classic 256 only."""
+
+    def __init__(self, data, extra=None, wide=True):
         if len(data) < 768:
             raise Error("PLAYPAL is shorter than 768 bytes")
-        self.rgb = [tuple(data[i * 3:i * 3 + 3]) for i in range(256)]
+        base = [tuple(data[i * 3:i * 3 + 3]) for i in range(256)]
+        self.wide = wide
+        if not wide:
+            self.rgb = base
+        elif extra is not None and len(extra) >= 768:
+            self.rgb = base + [tuple(extra[i * 3:i * 3 + 3]) for i in range(256)]
+        else:
+            ex = []
+            for i in range(256):
+                a, b = base[i], base[extra_pair(i)]
+                ex.append(tuple((a[k] + b[k] + 1) // 2 for k in range(3)))
+            self.rgb = base + ex
         self.cache = {}
 
     def index(self, c, glow=True):
         """palette index nearest to colour c. glow=False (walls and floors): an exact colour of the glow range (240-254)
         still gives that glow index, but a merely near one never does: glow colours shine at every light level, so an
-        approximate match would make a speck of the texture glow in the dark.  Index 255 (the spare) is never used."""
+        approximate match would make a speck of the texture glow in the dark.  The spare (255, 511) is never used.
+        Of equal colours the lowest index wins, so art that fits the classic 256 stays classic."""
         key = c if glow else (c, 'noglow')
         i = self.cache.get(key)
         if i is None:
             best = None
             for k, p in enumerate(self.rgb):
-                if k == 255 or (not glow and k >= 240 and p != tuple(c)):
+                if (k & 255) == 255 or (not glow and (k & 255) >= 240 and p != tuple(c)):
                     continue
                 dd = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2
                 if best is None or dd < best:
@@ -184,27 +227,37 @@ class Palette:
         return i
 
 
-def _post(out, top, run, prev):
+def _post(out, top, run, prev, wide=False):
     """append one post (rows `top`.. of a column) to `out`; `prev` is the absolute top of the previous post of the
     column (-1 for none). Pictures taller than 254 rows use DeePsea's tall patch convention, which the engine reads: a
     post whose topdelta is not larger than the previous post's top is relative to it, otherwise it is absolute. Where
     the distance is too big, empty posts are put in between. Returns the new `prev`."""
+    def body():
+        if wide:      # a wide post has no padding bytes: [top][length][length x uint16]
+            return struct.pack('<%dH' % len(run), *run)
+        return bytes([run[0]]) + bytes(run) + bytes([run[-1]])
+
+    def empty(t):
+        out.extend(bytes([t, 0]) if wide else bytes([t, 0, 0, 0]))
+
     while True:
         if top <= 254 and top > prev:
-            out += bytes([top, len(run), run[0]]) + bytes(run) + bytes([run[-1]])
+            out.extend(bytes([top, len(run)]))
+            out.extend(body())
             return top
         d = top - prev
         if prev >= 0 and 0 < d <= min(254, prev):
-            out += bytes([d, len(run), run[0]]) + bytes(run) + bytes([run[-1]])
+            out.extend(bytes([d, len(run)]))
+            out.extend(body())
             return top
         # an empty post to step with: the farthest one we can reach that is still above `top`
         q_abs = 254 if prev < 254 else -1
         q_rel = prev + min(254, prev) if prev > 0 else -1
         if q_abs >= q_rel and q_abs > prev:
-            out += bytes([q_abs, 0, 0, 0])
+            empty(q_abs)
             prev = q_abs
         elif q_rel > prev:
-            out += bytes([q_rel - prev, 0, 0, 0])
+            empty(q_rel - prev)
             prev = q_rel
         else:
             raise Error("cannot place a post at row %d" % top)
@@ -215,26 +268,29 @@ FACE_LUMP = re.compile(r'^[A-Z]{3}(ST\d\d|TR\d0|TL\d0|OUCH\d|EVL\d|KILL\d|GOD0|D
 
 
 def _face_lut(pal):
-    """palette index (0..239) nearest to each colour of 6 bits per channel, as a bytes object (made once)"""
+    """palette index (ordinary colours only: no glow, no spare) nearest to each colour of 6 bits per channel, as a list
+    (made once)"""
     lut = getattr(pal, 'lut6', None)
     if lut is None:
         import numpy as np
-        p = np.array(pal.rgb[:240], dtype=np.int32)
+        ids = [k for k in range(len(pal.rgb)) if (k & 255) < 240]
+        p = np.array([pal.rgb[k] for k in ids], dtype=np.int32)
         g = np.arange(64, dtype=np.int32) * 4 + 2
         r, gg, b = np.meshgrid(g, g, g, indexing='ij')
         cols = np.stack([r.ravel(), gg.ravel(), b.ravel()], axis=1)
-        out = np.empty(len(cols), dtype=np.uint8)
+        out = np.empty(len(cols), dtype=np.int32)
         for i in range(0, len(cols), 16384):
             c = cols[i:i + 16384]
             d = (3 * (c[:, None, 0] - p[None, :, 0]) ** 2 + 4 * (c[:, None, 1] - p[None, :, 1]) ** 2
                  + 2 * (c[:, None, 2] - p[None, :, 2]) ** 2)
             out[i:i + 16384] = d.argmin(axis=1)
-        lut = pal.lut6 = out.tobytes()
+        ids = np.array(ids, dtype=np.int32)
+        lut = pal.lut6 = ids[out].tolist()
     return lut
 
 
 def dither_indices(img, pal):
-    """Floyd-Steinberg error diffusion of an RGB image to the ordinary colours of the palette (0..239). Used for status
+    """Floyd-Steinberg error diffusion of an RGB image to the ordinary colours of the palette. Used for status
     faces bigger than their 35x32 slot: the engine averages the picture down to the screen's resolution, which brings
     the colours back only if the picture was dithered rather than snapped to the nearest colour."""
     lut = _face_lut(pal)
@@ -274,32 +330,55 @@ def encode_patch(pngdata, pal, name, glow=True):
     base = os.path.basename(name).upper()
     dith = dither_indices(img, pal) if FACE_LUMP.match(os.path.splitext(base)[0]) and (w > 35 or h > 32) else None
     cols = []
+    wide = False
     for x in range(w):
-        out = bytearray()
-        prev = -1
+        posts = []
         y = 0
         while y < h:
             if px[x, y][3] < 128:
                 y += 1
                 continue
             y0 = y
-            run = bytearray()
+            run = []
             while y < h and px[x, y][3] >= 128 and len(run) < 254:
                 run.append(dith[y][x] if dith else pal.index(px[x, y][:3], glow))
                 y += 1
-            prev = _post(out, y0, run, prev)
+            if max(run) > 255:
+                wide = True
+            posts.append((y0, run))
+        cols.append(posts)
+    # a picture that uses only the classic 256 colours stays a classic picture; one that uses an in-between colour
+    # is a wide picture ("BGW1", 16-bit indices)
+    enc = []
+    for posts in cols:
+        out = bytearray()
+        prev = -1
+        for y0, run in posts:
+            prev = _post(out, y0, run, prev, wide)
         out.append(255)
-        cols.append(bytes(out))
+        enc.append(bytes(out))
     head = struct.pack('<hhhh', w, h, off[0], off[1])
     pos = 8 + 4 * w
     offs = []
-    for c in cols:
+    for c in enc:
         offs.append(pos)
         pos += len(c)
-    return head + struct.pack('<%di' % w, *offs) + b''.join(cols)
+    body = head + struct.pack('<%di' % w, *offs) + b''.join(enc)
+    return WIDE_MAGIC + body if wide else body
+
+
+WIDE_FLAT_SIZES = {4 + 2 * n * n: (n, n) for n in (64, 128, 256, 512, 1024)}
 
 
 def decode_flat(b, pal):
+    if b[:4] == WIDE_MAGIC and len(b) in WIDE_FLAT_SIZES and len(pal) >= 512:
+        w, h = WIDE_FLAT_SIZES[len(b)]
+        v = struct.unpack('<%dH' % (w * h), b[4:])
+        if max(v) >= len(pal):
+            return None
+        img = Image.new('RGB', (w, h))
+        img.putdata([pal[i] for i in v])
+        return img
     if len(b) not in FLAT_SIZES:
         return None
     w, h = FLAT_SIZES[len(b)]
@@ -313,7 +392,12 @@ def encode_flat(pngdata, pal, name, glow=False):
     if img.size not in FLAT_SIZES.values():
         raise Error("%s: a flat must be 64x64, 64x128, 128x128 or 256x256, this one is %dx%d" % ((name,) + img.size))
     d = img.tobytes()
-    return bytes(pal.index((d[i], d[i + 1], d[i + 2]), glow) for i in range(0, len(d), 3))
+    v = [pal.index((d[i], d[i + 1], d[i + 2]), glow) for i in range(0, len(d), 3)]
+    if max(v) > 255:
+        if img.size not in WIDE_FLAT_SIZES.values():
+            raise Error("%s: a flat that uses in-between colours must be square (%dx%d is not)" % ((name,) + img.size))
+        return WIDE_MAGIC + struct.pack('<%dH' % len(v), *v)
+    return bytes(v)
 
 
 def decode_sound(b):
@@ -377,7 +461,12 @@ def unpack(src, dst, merge=False, suffix_dups=False):
         play = next((d for n, d in lumps if n == 'PLAYPAL'), None)
     if play is None:
         raise Error("no PLAYPAL in %s or in the tree: needed to turn pictures into PNG" % src)
-    pal = Palette(play).rgb
+    xf = os.path.join(dst, 'palette', 'PLAYPALX.lmp')
+    if os.path.exists(xf):
+        extra = open(xf, 'rb').read()
+    else:
+        extra = next((d for n, d in lumps if n == 'PLAYPALX'), None)
+    pal = Palette(play, extra).rgb
     stats = {}
     written = set()
 
@@ -497,7 +586,9 @@ class Tree:
         pf = os.path.join(root, 'palette', 'PLAYPAL.lmp')
         if not os.path.exists(pf):
             raise Error("%s is missing" % pf)
-        self.pal = Palette(open(pf, 'rb').read())
+        xf = os.path.join(root, 'palette', 'PLAYPALX.lmp')
+        extra = open(xf, 'rb').read() if os.path.exists(xf) else None
+        self.pal = Palette(open(pf, 'rb').read(), extra)
 
     def files(self, group):
         base = os.path.join(self.root, group)

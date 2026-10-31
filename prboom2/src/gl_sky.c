@@ -482,12 +482,12 @@ void gld_GetSkyCapColors(void)
 
   colormap = fullcolormap + INVERSECOLORMAP * 256 * sizeof(lighttable_t);
 
-  color = V_BestColor(playpal, ceiling_rgb->r, ceiling_rgb->g, ceiling_rgb->b);
+  color = V_BestColorN(playpal, 256, ceiling_rgb->r, ceiling_rgb->g, ceiling_rgb->b);
   SkyBox.CeilingSkyColor[1].r = playpal[colormap[color] * 3 + 0];
   SkyBox.CeilingSkyColor[1].g = playpal[colormap[color] * 3 + 1];
   SkyBox.CeilingSkyColor[1].b = playpal[colormap[color] * 3 + 2];
 
-  color = V_BestColor(playpal, floor_rgb->r, floor_rgb->g, floor_rgb->b);
+  color = V_BestColorN(playpal, 256, floor_rgb->r, floor_rgb->g, floor_rgb->b);
   SkyBox.FloorSkyColor[1].r = playpal[colormap[color] * 3 + 0];
   SkyBox.FloorSkyColor[1].g = playpal[colormap[color] * 3 + 1];
   SkyBox.FloorSkyColor[1].b = playpal[colormap[color] * 3 + 2];

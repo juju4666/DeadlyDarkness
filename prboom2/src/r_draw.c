@@ -39,6 +39,7 @@
 #include "w_wad.h"
 #include "r_main.h"
 #include "r_draw.h"
+#include "dsda/bgcolor.h"
 #include "v_video.h"
 #include "st_stuff.h"
 #include "g_game.h"
@@ -66,8 +67,8 @@ int  viewheight;
 //
 
 // CPhipps - made const*'s
-const byte *tranmap;          // translucency filter maps 256x256   // phares
-const byte *main_tranmap;     // killough 4/11/98
+const pixel_t *tranmap;       // translucency filter maps (BG_NUMCOLORS squared)   // phares
+const pixel_t *main_tranmap;  // killough 4/11/98
 
 //
 // R_DrawColumn
@@ -89,14 +90,14 @@ static int    temp_x = 0;
 static int    tempyl[4], tempyh[4];
 
 // e6y: resolution limitation is removed
-static byte           *tempbuf;
+static pixel_t        *tempbuf;
 
 static int    startx = 0;
 static int    temptype = COL_NONE;
 static int    commontop, commonbot;
-static const byte *temptranmap = NULL;
+static const pixel_t *temptranmap = NULL;
 // SoM 7-28-04: Fix the fuzz problem.
-static const byte   *tempfuzzmap;
+static const pixel_t *tempfuzzmap;
 
 //
 // Spectre/Invisibility.
@@ -237,7 +238,7 @@ void R_ResetColumnBuffer(void)
 //  be used. It has also been used with Wolfenstein 3D.
 //
 
-byte *translationtables;
+pixel_t *translationtables;
 
 #define R_DRAWCOLUMN_PIPELINE_TYPE RDC_PIPELINE_STANDARD
 #define R_DRAWCOLUMN_PIPELINE_BASE RDC_STANDARD
@@ -370,6 +371,34 @@ byte playernumtotrans[MAX_MAXPLAYERS];
 // HERETIC_TODO: player colors
 const byte player_colors[] = { 0x70, 0x60, 0x40, 0x20 };
 
+// The translation tables are made for the first 256 colours (as the original game does) and then widened to the whole
+// palette; the 256-colour form is kept for when the palette changes.
+static byte* trans8;
+static int trans8_count;
+
+static void R_WidenTranslationTables(int count, dboolean capture)
+{
+  int t, k;
+
+  if (capture)
+  {
+    free(trans8);
+    trans8 = malloc((size_t) count * 256);
+    for (t = 0; t < count; ++t)
+      for (k = 0; k < 256; ++k)
+        trans8[t * 256 + k] = (byte) translationtables[t * BG_NUMCOLORS + k];
+    trans8_count = count;
+  }
+  for (t = 0; t < trans8_count; ++t)
+    bg_WidenRemap(trans8 + t * 256, translationtables + (size_t) t * BG_NUMCOLORS);
+}
+
+void R_RebuildTranslationTables(void)
+{
+  if (trans8 && translationtables)
+    R_WidenTranslationTables(0, false);
+}
+
 void R_InitTranslationTables (void)
 {
   int i, j;
@@ -379,7 +408,7 @@ void R_InitTranslationTables (void)
   if (hexen)
   {
     int lumpnum = W_GetNumForName("trantbl0");
-    translationtables = Z_Malloc(256 * 3 * (g_maxplayers - 1));
+    translationtables = Z_Malloc(BG_NUMCOLORS * 3 * (g_maxplayers - 1) * sizeof(pixel_t));
 
     for (i = 0; i < g_maxplayers; i++)
       playernumtotrans[i] = i;
@@ -387,9 +416,15 @@ void R_InitTranslationTables (void)
     for (i = 0; i < 3 * (g_maxplayers - 1); i++)
     {
         const byte* transLump = W_LumpByNum(lumpnum + i);
-        memcpy(translationtables + i * 256, transLump, 256);
+        int k;
+
+        for (k = 0; k < 256; ++k)
+          translationtables[i * BG_NUMCOLORS + k] = transLump[k];
+        for (; k < BG_NUMCOLORS; ++k)
+          translationtables[i * BG_NUMCOLORS + k] = k;
     }
 
+    R_WidenTranslationTables(3 * (g_maxplayers - 1), true);
     return;
   }
 
@@ -397,7 +432,7 @@ void R_InitTranslationTables (void)
   // Remove dependency of colormaps aligned on 256-byte boundary
 
   if (translationtables == NULL) // CPhipps - allow multiple calls
-    translationtables = Z_Malloc(256*MAXTRANS);
+    translationtables = Z_Malloc(BG_NUMCOLORS * MAXTRANS * sizeof(pixel_t));
 
   for (i=0; i<MAXTRANS; i++) transtocolour[i] = 255;
 
@@ -414,16 +449,18 @@ void R_InitTranslationTables (void)
   }
 
   // translate just the 16 green colors
-  for (i=0; i<256; i++)
+  for (i=0; i<BG_NUMCOLORS; i++)
     if (i >= 0x70 && i<= 0x7f)
     {
       // CPhipps - configurable player colours
       translationtables[i] = colormaps[0][(i&0xf) + transtocolour[0]];
-      translationtables[i+256] = colormaps[0][(i&0xf) + transtocolour[1]];
-      translationtables[i+512] = colormaps[0][(i&0xf) + transtocolour[2]];
+      translationtables[i+BG_NUMCOLORS] = colormaps[0][(i&0xf) + transtocolour[1]];
+      translationtables[i+2*BG_NUMCOLORS] = colormaps[0][(i&0xf) + transtocolour[2]];
     }
     else  // Keep all other colors as is.
-      translationtables[i]=translationtables[i+256]=translationtables[i+512]=i;
+      translationtables[i]=translationtables[i+BG_NUMCOLORS]=translationtables[i+2*BG_NUMCOLORS]=i;
+
+  R_WidenTranslationTables(MAXTRANS, true);
 }
 
 //
@@ -445,11 +482,11 @@ void R_DrawSpan(draw_span_vars_t *dsvars) {
   fixed_t yfrac = dsvars->yfrac;
   const fixed_t xstep = dsvars->xstep;
   const fixed_t ystep = dsvars->ystep;
-  const byte *source = dsvars->source;
-  const byte *colormap = dsvars->colormap;
+  const pixel_t *source = dsvars->source;
+  const pixel_t *colormap = dsvars->colormap;
   const int flatshift = dsvars->flatshift;
   const fixed_t flatmask = (1 << flatshift) - 1;
-  byte *dest = drawvars.topleft + dsvars->y*drawvars.pitch + dsvars->x1;
+  pixel_t *dest = drawvars.topleft + dsvars->y*drawvars.pitch + dsvars->x1;
 
   while (count) {
     const fixed_t xtemp = (xfrac >> 16) & flatmask;
@@ -508,8 +545,8 @@ void R_InitBuffer(int width, int height)
 void R_FillBackColor (void)
 {
   extern patchnum_t stbarbg;
-  static byte col;
-  static byte col_top;
+  static pixel_t col;
+  static pixel_t col_top;
   static int prevlump = -1;
   const int stbar_top = SCREENHEIGHT - ST_SCALED_HEIGHT;
   const int ST_SCALED_BORDER = brdr_b.height * patches_scaley/2;
@@ -517,7 +554,7 @@ void R_FillBackColor (void)
 
   if (prevlump != lump)
   {
-    const unsigned char *playpal = V_GetPlaypal();
+    const unsigned char *playpal = V_GetColorPalette();
     SDL_Color stbar_color = V_GetPatchColor(lump);
     int r = stbar_color.r;
     int g = stbar_color.g;
@@ -603,7 +640,7 @@ static void R_CopyScreenBufferSection(int x, int y, int count)
   if (V_IsSoftwareMode())
     memcpy(screens[0].data+y*screens[0].pitch+x,
            screens[1].data+y*screens[1].pitch+x,
-           count);   // LFB copy.
+           count * sizeof(pixel_t));   // LFB copy.
 }
 
 //

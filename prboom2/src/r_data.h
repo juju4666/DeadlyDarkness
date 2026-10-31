@@ -70,7 +70,10 @@ extern int numtextures;
 extern texture_t **textures;
 
 
-const byte *R_GetTextureColumn(const rpatch_t *texpatch, int col);
+const pixel_t *R_GetFlatPixels(int lump);
+int R_FlatPixelCount(int lump);   // pixels of a flat (a wide flat lump is twice as long as its pixels)
+void R_UpdatePaletteTables(void);   // the palette in use changed: make every table derived from it again
+const pixel_t *R_GetTextureColumn(const rpatch_t *texpatch, int col);
 
 
 // I/O, setting up the stuff.
@@ -94,7 +97,7 @@ int PUREFUNC R_CheckTextureNumForName (const char *name);
 
 int R_ColormapNumForName(const char *name);      // killough 4/4/98
 
-extern const byte *main_tranmap, *tranmap;
+extern const pixel_t *main_tranmap, *tranmap;
 
 /* Proff - Added for OpenGL - cph - const char* param */
 void R_SetPatchNum(patchnum_t *patchnum, const char *name);

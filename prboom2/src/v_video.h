@@ -64,7 +64,7 @@ extern int psprite_offset; // Needed for "tallscreen" modes
 // Screen 1 is an extra buffer.
 
 // array of pointers to color translation tables
-extern const byte *colrngs[];
+extern const pixel_t *colrngs[];
 
 // symbolic indices into color translation table pointer array
 typedef enum
@@ -116,7 +116,7 @@ typedef enum
 //jff 1/16/98 end palette color range additions
 
 typedef struct {
-  byte *data;          // pointer to the screen content
+  pixel_t *data;       // pointer to the screen content
   dboolean not_on_heap; // if set, no malloc or free is preformed and
                        // data never set to NULL. Used i.e. with SDL doublebuffer.
   int width;           // the width of the surface
@@ -205,7 +205,7 @@ void V_CopyScreen(int srcscrn, int destscrn);
 
 // V_FillRect
 typedef void (*V_FillRect_f)(int scrn, int x, int y,
-                             int width, int height, byte colour);
+                             int width, int height, pixel_t colour);
 extern V_FillRect_f V_FillRect;
 
 // CPhipps - patch drawing
@@ -275,7 +275,7 @@ void V_ChangeScreenResolution(void);
 // CPhipps - function to plot a pixel
 
 // V_PlotPixel
-typedef void (*V_PlotPixel_f)(int,int,int,byte);
+typedef void (*V_PlotPixel_f)(int,int,int,pixel_t);
 extern V_PlotPixel_f V_PlotPixel;
 
 typedef struct
@@ -298,7 +298,7 @@ typedef void (*V_DrawLineWu_f)(fline_t* fl, int color);
 extern V_DrawLineWu_f V_DrawLineWu;
 
 // V_PlotPixelWu
-typedef void (*V_PlotPixelWu_f)(int scrn, int x, int y, byte color, int weight);
+typedef void (*V_PlotPixelWu_f)(int scrn, int x, int y, pixel_t color, int weight);
 extern V_PlotPixelWu_f V_PlotPixelWu;
 
 void V_AllocScreen(screeninfo_t *scrn);
@@ -307,6 +307,8 @@ void V_FreeScreen(screeninfo_t *scrn);
 void V_FreeScreens();
 
 const unsigned char* V_GetPlaypal(void);
+const unsigned char* V_GetColorPalette(void);
+const unsigned char* V_GetColorPaletteFor(int pal);
 void V_FreePlaypal(void);
 
 // [XA] get number of palettes in the current playpal
@@ -319,7 +321,10 @@ void V_ClearBorder(void);
 
 void V_GetWideRect(int *x, int *y, int *w, int *h, enum patch_translation_e flags);
 
-int V_BestColor(const unsigned char *palette, int r, int g, int b);
+void V_RebuildColorTranslation(void);
+void V_ResetFlexTranTable(void);
+int V_BestColor(const unsigned char *palette, int r, int g, int b);   // palette: BG_NUMCOLORS entries (V_GetColorPalette)
+int V_BestColorN(const unsigned char *palette, int count, int r, int g, int b);
 void V_TintRect(int x, int y, int w, int h, int pal);
 
 // [FG] colored blood and gibs
@@ -327,8 +332,8 @@ int V_BloodColor(int blood);
 
 #include "gl_struct.h"
 
-void V_FillRectVPT(int scrn, int x, int y, int width, int height, byte color, enum patch_translation_e flags);
-int V_FillHeightVPT(int scrn, int y, int height, byte color, enum patch_translation_e flags);
+void V_FillRectVPT(int scrn, int x, int y, int width, int height, pixel_t color, enum patch_translation_e flags);
+int V_FillHeightVPT(int scrn, int y, int height, pixel_t color, enum patch_translation_e flags);
 
 // heretic
 

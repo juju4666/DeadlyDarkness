@@ -2314,7 +2314,7 @@ void P_PostProcessCompatibleLineSpecial(line_t *ld)
   {                         // killough 4/11/98: handle special types
     case 260:               // killough 4/11/98: translucent 2s textures
     {
-      const byte* tranmap;
+      const pixel_t* tranmap;
       int lump, j;
 
       lump = sides[*ld->sidenum].special; // translucency from sidedef
@@ -2322,7 +2322,7 @@ void P_PostProcessCompatibleLineSpecial(line_t *ld)
       if (!lump)
         tranmap = main_tranmap;
       else
-        tranmap = W_LumpByNum(lump - 1);
+        tranmap = dsda_TranMapFromLump(lump - 1);
 
       if (!ld->special_args[0]) // if tag==0,
       {

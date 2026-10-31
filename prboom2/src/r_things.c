@@ -597,8 +597,8 @@ static void R_DrawVisSprite(vissprite_t *vis)
   else if (vis->mobjflags & MF_TRANSLATION)
   {
     colfunc = R_GetDrawColumnFunc(RDC_PIPELINE_TRANSLATED, RDRAW_FILTER_POINT);
-    dcvars.translation = translationtables - 256 +
-      ((vis->mobjflags & MF_TRANSLATION) >> (MF_TRANSSHIFT-8) );
+    dcvars.translation = translationtables - BG_NUMCOLORS +
+      ((vis->mobjflags & MF_TRANSLATION) >> (MF_TRANSSHIFT-BG_COLORBITS) );
   }
   else if (vis->tranmap) // phares
   {

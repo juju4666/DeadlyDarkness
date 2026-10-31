@@ -20,7 +20,8 @@
 
 #include "doomtype.h"
 
-const byte* dsda_TranMap(unsigned int alpha);
-const byte* dsda_DefaultTranMap(void);
+const pixel_t* dsda_TranMap(unsigned int alpha);
+const pixel_t* dsda_DefaultTranMap(void);
+const pixel_t* dsda_TranMapFromLump(int lump);
 
 #endif

@@ -62,6 +62,7 @@
 #include "dsda/bgcoop.h"
 #include "dsda/bgnet.h"
 #include "dsda/bglight.h"
+#include "dsda/bgcolor.h"
 #include "dsda/bgvoxel.h"
 #include "dsda/bgprogress.h"
 #include "dsda/bgsplit.h"
@@ -4432,7 +4433,7 @@ void dsda_BegottenLiveTest(void)
         // the strip lamp is cool white, the torch warm: their tints come through, and a tinted map really is tinted
         int cool = bg_LightProbeTint(256, 256, 0);
         int warm_type = bg_LightTypeFor(20101), t_warm, t_cool = cool, grey = 0, i, gl = -1;
-        const unsigned char* pal = V_GetPlaypal();
+        const unsigned char* pal = V_GetColorPalette();
         char w[140];
 
         P_RemoveMobj(m);
@@ -4476,6 +4477,13 @@ void dsda_BegottenLiveTest(void)
 
         snprintf(w, sizeof w, "fog: %s", fm);
         CHECK(ff == 0, w);
+      }
+      {
+        char cm[220], w[300];
+        int cf = bg_SelfTest(cm, sizeof cm);
+
+        snprintf(w, sizeof w, "colour: %s", cm);
+        CHECK(cf == 0, w);
       }
       // shadows: rays against made-up geometry (pillar, step, closed door, low ceiling), then a real bake
       {

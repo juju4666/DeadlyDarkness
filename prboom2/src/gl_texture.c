@@ -303,7 +303,7 @@ static void gld_AddPatchToTexture_UnTranslated(GLTexture *gltexture, unsigned ch
   int xs,xe;
   int js,je;
   const rcolumn_t *column;
-  const byte *source;
+  const pixel_t *source;
   int i, pos;
   int bpp;
   const unsigned char *playpal;
@@ -398,10 +398,10 @@ void gld_AddPatchToTexture(GLTexture *gltexture, unsigned char *buffer, const rp
   int xs,xe;
   int js,je;
   const rcolumn_t *column;
-  const byte *source;
+  const pixel_t *source;
   int i, pos;
   const unsigned char *playpal;
-  const unsigned char *outr;
+  const pixel_t *outr;
   const lighttable_t *colormap = (fixedcolormap ? fixedcolormap : fullcolormap);
   int bpp;
 
@@ -413,11 +413,11 @@ void gld_AddPatchToTexture(GLTexture *gltexture, unsigned char *buffer, const rp
   if ((cm==CR_DEFAULT) || (cm==CR_LIMIT))
     outr=&colormaps[0][0];
   else if (cm==CR_DARKEN)
-    outr=&colormaps[0][256 * 15];
+    outr=&colormaps[0][BG_NUMCOLORS * 15];
   else if (cm<CR_LIMIT)
     outr=colrngs[cm];
   else
-    outr=translationtables + 256*((cm-CR_LIMIT)-1);
+    outr=translationtables + BG_NUMCOLORS*((cm-CR_LIMIT)-1);
 
   playpal = V_GetPlaypal();
   xs=0;
@@ -624,7 +624,7 @@ static void gld_AddIndexedSkyToTexture(GLTexture *gltexture, unsigned char *buff
   int xs,xe;
   int js,je;
   const rcolumn_t *column;
-  const byte *source;
+  const pixel_t *source;
   int i, pos;
   const unsigned char *playpal;
   const byte * gtable;

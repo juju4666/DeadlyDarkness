@@ -17,185 +17,104 @@
 
 #include <string.h>
 
-#include "md5.h"
 #include "lprintf.h"
-#include "m_file.h"
+#include "v_video.h"
 #include "w_wad.h"
 #include "z_zone.h"
 
-#include "dsda/data_organizer.h"
-#include "dsda/utility.h"
+#include "dsda/bgcolor.h"
 
 #include "tranmap.h"
 
-static char* tranmap_base_dir;
-static char* tranmap_palette_dir;
-static dsda_cksum_t playpal_cksum;
+// A translucency table: entry [dest * BG_NUMCOLORS + source] is the palette colour nearest to the blend of the two. It
+// is worked out from the reference palette (the whole wide palette, with an exact nearest-colour search) when first
+// asked for, like the original game's table it does not change with the palette in use.
+
 static const int default_tranmap_alpha = 66;
-static const int tranmap_length = 256 * 256;
-static const byte* tranmap_data[100];
+static const size_t tranmap_length = (size_t) BG_NUMCOLORS * BG_NUMCOLORS * sizeof(pixel_t);
+static pixel_t* tranmap_data[100];
 
-static void dsda_CalculatePlaypalCksum(void) {
-  struct MD5Context md5;
-  int lump;
+#define MAX_LUMP_TRANMAPS 32
+static struct { int lump; pixel_t* data; } lump_tranmaps[MAX_LUMP_TRANMAPS];
+static int num_lump_tranmaps;
 
-  lump = W_GetNumForName("PLAYPAL");
+static void dsda_FillTranMap(pixel_t* buffer, unsigned int alpha)
+{
+  const byte* pal = bg_ReferencePalette();
+  int i, j;
+  const int w1 = (int) alpha, w2 = 100 - (int) alpha;
 
-  MD5Init(&md5);
-  MD5Update(&md5, W_LumpByNum(lump), W_LumpLength(lump));
-  MD5Final(playpal_cksum.bytes, &md5);
-  dsda_TranslateCheckSum(&playpal_cksum);
-}
-
-static void dsda_InitTranMapBaseDir(void) {
-  int length;
-  const char* data_root;
-
-  data_root = dsda_DataRoot();
-
-  length = strlen(data_root) + 10; // "/tranmaps\0"
-  tranmap_base_dir = Z_Malloc(length);
-  snprintf(tranmap_base_dir, length, "%s/tranmaps", data_root);
-
-  M_MakeDir(tranmap_base_dir, false);
-}
-
-static void dsda_InitTranMapPaletteDir(void) {
-  int length;
-
-  if (!tranmap_base_dir)
-    dsda_InitTranMapBaseDir();
-
-  if (!playpal_cksum.string[0])
-    dsda_CalculatePlaypalCksum();
-
-  length = strlen(tranmap_base_dir) + 34; // "/<cksum (32)>\0"
-  tranmap_palette_dir = Z_Malloc(length);
-  snprintf(tranmap_palette_dir, length, "%s/%s", tranmap_base_dir, playpal_cksum.string);
-
-  M_MakeDir(tranmap_palette_dir, false);
-}
-
-//
-// R_InitTranMap
-//
-// Initialize translucency filter map
-//
-// By Lee Killough 2/21/98
-//
-
-#define TSC 12 /* number of fixed point digits in filter percent */
-
-static byte* dsda_GenerateTranMap(unsigned int alpha) {
-  byte* buffer;
-  const byte* playpal;
-  int pal[3][256];
-  int tot[256];
-  int pal_w1[3][256];
-  int w1, w2;
-
-  playpal = W_LumpByName("PLAYPAL");
-
-  w1 = (alpha << TSC) / 100;
-  w2 = (1l << TSC) - w1;
-
-  buffer = Z_Malloc(tranmap_length);
-
-  // First, convert playpal into long int type, and transpose array,
-  // for fast inner-loop calculations. Precompute tot array.
+  if (!pal)
   {
-    register int i = 255;
-    register const unsigned char *p = playpal + 255 * 3;
-
-    do {
-      register int t, d;
-      pal_w1[0][i] = (pal[0][i] = t = p[0]) * w1;
-      d = t * t;
-      pal_w1[1][i] = (pal[1][i] = t = p[1]) * w1;
-      d += t * t;
-      pal_w1[2][i] = (pal[2][i] = t = p[2]) * w1;
-      d += t * t;
-      p -= 3;
-      tot[i] = d << (TSC - 1);
-    }
-    while (--i >= 0);
+    for (i = 0; i < BG_NUMCOLORS; i++)
+      for (j = 0; j < BG_NUMCOLORS; j++)
+        buffer[i * BG_NUMCOLORS + j] = (pixel_t) j;
+    return;
   }
-
-  // Next, compute all entries using minimum arithmetic.
+  for (i = 0; i < BG_NUMCOLORS; i++)
   {
-    int i, j;
-    byte *tp = buffer;
+    const byte* d = pal + 3 * i;
 
-    for (i = 0; i < 256; i++) {
-      int r1 = pal[0][i] * w2;
-      int g1 = pal[1][i] * w2;
-      int b1 = pal[2][i] * w2;
+    for (j = 0; j < BG_NUMCOLORS; j++)
+    {
+      const byte* s = pal + 3 * j;
 
-      for (j = 0; j < 256; j++, tp++) {
-        register int color = 255;
-        register int err;
-        int r = pal_w1[0][j] + r1;
-        int g = pal_w1[1][j] + g1;
-        int b = pal_w1[2][j] + b1;
-        int best = INT_MAX;
-
-        do {
-          err = tot[color] - pal[0][color] * r - pal[1][color] * g - pal[2][color] * b;
-          if (err < best) {
-            best = err;
-            *tp = color;
-          }
-        }
-        while (--color >= 0);
-      }
+      buffer[i * BG_NUMCOLORS + j] = (pixel_t) bg_ColorNearest((d[0] * w2 + s[0] * w1 + 50) / 100,
+                                                               (d[1] * w2 + s[1] * w1 + 50) / 100,
+                                                               (d[2] * w2 + s[2] * w1 + 50) / 100);
     }
   }
-
-  return buffer;
 }
 
-const byte* dsda_TranMap(unsigned int alpha) {
-  int length;
-  byte *buffer = NULL;
-
+const pixel_t* dsda_TranMap(unsigned int alpha) {
   if (alpha > 99)
     return NULL;
 
   if (!tranmap_data[alpha]) {
-    char* filename;
-
-    if (!tranmap_palette_dir)
-      dsda_InitTranMapPaletteDir();
-
-    length = strlen(tranmap_palette_dir) + 16; // "/tranmap_99.dat\0"
-    filename = Z_Malloc(length);
-    snprintf(filename, length, "%s/tranmap_%02d.dat", tranmap_palette_dir, alpha);
-
-    length = M_ReadFile(filename, &buffer);
-    if (buffer && length != tranmap_length) {
-      Z_Free(buffer);
-      buffer = NULL;
-    }
-
-    if (!buffer) {
-      buffer = dsda_GenerateTranMap(alpha);
-
-      M_WriteFile(filename, buffer, tranmap_length);
-    }
-
-    tranmap_data[alpha] = buffer;
+    tranmap_data[alpha] = Z_Malloc(tranmap_length);
+    dsda_FillTranMap(tranmap_data[alpha], alpha);
   }
 
   return tranmap_data[alpha];
 }
 
-const byte* dsda_DefaultTranMap(void) {
+// A legacy TRANMAP lump (256 x 256 indices): kept for the first 256 colours, the rest worked out like the others.
+static void dsda_FillFromLump(pixel_t* buffer, const byte* src)
+{
+  int i, j;
+
+  dsda_FillTranMap(buffer, default_tranmap_alpha);
+  for (i = 0; i < 256; i++)
+    for (j = 0; j < 256; j++)
+      buffer[i * BG_NUMCOLORS + j] = src[i * 256 + j];
+}
+
+const pixel_t* dsda_TranMapFromLump(int lump)
+{
+  int i;
+
+  for (i = 0; i < num_lump_tranmaps; i++)
+    if (lump_tranmaps[i].lump == lump)
+      return lump_tranmaps[i].data;
+
+  if (W_LumpLength(lump) < 256 * 256)
+    return dsda_TranMap(default_tranmap_alpha);
+
+  if (num_lump_tranmaps == MAX_LUMP_TRANMAPS)
+    return dsda_TranMap(default_tranmap_alpha);   // far more than any wad has
+  lump_tranmaps[num_lump_tranmaps].lump = lump;
+  lump_tranmaps[num_lump_tranmaps].data = Z_Malloc(tranmap_length);
+  dsda_FillFromLump(lump_tranmaps[num_lump_tranmaps].data, W_LumpByNum(lump));
+  return lump_tranmaps[num_lump_tranmaps++].data;
+}
+
+const pixel_t* dsda_DefaultTranMap(void) {
   int lump;
 
   lump = W_CheckNumForName("TRANMAP");
 
-  if (lump != LUMP_NOT_FOUND)
-    return W_LumpByNum(lump);
+  if (lump != LUMP_NOT_FOUND && W_LumpLength(lump) >= 256 * 256)
+    return dsda_TranMapFromLump(lump);
 
   return dsda_TranMap(default_tranmap_alpha);
 }

@@ -61,6 +61,7 @@
 #include "dsda/aim.h"
 #include "dsda/bgvoxel.h"
 #include "dsda/bglight.h"
+#include "dsda/bgcolor.h"
 #include "dsda/bgmonster.h"
 #include "s_sound.h"
 #include "dsda/mapinfo.h"
@@ -226,7 +227,7 @@ static int sector_zone_default;                // the zone every sector has when
 
 #define BG_FOG_SLOTS 4096
 #define BG_FOG_HASH 8192
-static byte (*fog_pool)[256];
+static pixel_t (*fog_pool)[BG_NUMCOLORS];
 static bg_key_t* fog_hkey;
 static short* fog_hidx;
 static int fog_count;
@@ -908,7 +909,7 @@ static int mcol_types;
 static const double* bg_MobjColour(const mobj_t* mo)
 {
   static const double white[3] = { 1, 1, 1 };
-  const unsigned char* pal = V_GetPlaypal();
+  const unsigned char* pal = V_GetColorPalette();
   const state_t* st;
   const spriteframe_t* sf;
   int type = mo->type;
@@ -1641,18 +1642,16 @@ static double bg_GlowAt(int s, double* colour)
 #define BG_TINT_STEPS 12
 
 #define BG_COLOUR_LEVELS 5                  // levels per channel: 125 colours
-static byte* tint_cache[BG_COLOUR_LEVELS * BG_COLOUR_LEVELS * BG_COLOUR_LEVELS + 1][BG_TINT_STEPS + 1][NUMCOLORMAPS];
-// colours -> palette index. The cells get narrower toward black (a cell edge is at 255 * (l / N)^2) because dark
-// colours sit close together, and 8-unit cells washed their hues out to grey. Index 255 is never handed out: it is the
-// spare dark green of every theme (the automap background), not a colour of the art.
-#define BG_CUBE 40
-static byte* nearest_cube;
-static unsigned char cube_q[256];           // 0..255 -> cell
-static byte bg_Nearest(int r, int g, int b);
-#define BG_CUBE_AT(r, g, b) nearest_cube[((int) cube_q[(r)] * BG_CUBE + (int) cube_q[(g)]) * BG_CUBE + (int) cube_q[(b)]]
-static byte bg_Nearest(int r, int g, int b)
+static pixel_t* tint_cache[BG_COLOUR_LEVELS * BG_COLOUR_LEVELS * BG_COLOUR_LEVELS + 1][BG_TINT_STEPS + 1][NUMCOLORMAPS];
+// colours -> palette index: the exact nearest colour of the palette (the eye cares most about green), found through a
+// search structure (see dsda/bgcolor.h). Colour 255 is never handed out: it is the spare dark green of every theme (the
+// automap background), not a colour of the art.
+static bg_nn_t* nearest_cube;
+static pixel_t bg_Nearest(int r, int g, int b);
+#define BG_CUBE_AT(r, g, b) ((pixel_t) bg_NNFind(nearest_cube, (r), (g), (b)))
+static pixel_t bg_Nearest(int r, int g, int b)
 {
-  return BG_CUBE_AT(r < 0 ? 0 : r > 255 ? 255 : r, g < 0 ? 0 : g > 255 ? 255 : g, b < 0 ? 0 : b > 255 ? 255 : b);
+  return BG_CUBE_AT(r, g, b);
 }
 static const byte* cache_pal;
 static const lighttable_t* cache_cmap;
@@ -1663,7 +1662,7 @@ static unsigned bg_PalHash(const byte* pal)
   unsigned h = 2166136261u;
   int i;
 
-  for (i = 0; i < 768; ++i)
+  for (i = 0; i < 3 * BG_NUMCOLORS; ++i)
     h = (h ^ pal[i]) * 16777619u;
   return h;
 }
@@ -1683,7 +1682,7 @@ static void bg_DropTintCache(void)
 
 static void bg_CheckTintCache(void)
 {
-  const byte* pal = V_GetPlaypal();
+  const byte* pal = V_GetColorPalette();
   unsigned h;
 
   if (!pal)
@@ -1696,41 +1695,8 @@ static void bg_CheckTintCache(void)
   cache_pal = pal;
   cache_hash = h;
   cache_cmap = fullcolormap;
-  if (!nearest_cube)
-    nearest_cube = malloc(BG_CUBE * BG_CUBE * BG_CUBE);
-  {
-    int r, g, b, v;
-    int centre[BG_CUBE];
-
-    for (v = 0; v < 256; ++v)
-    {
-      int q = (int) (sqrt((double) v / 255.0) * BG_CUBE);
-
-      cube_q[v] = (unsigned char) (q >= BG_CUBE ? BG_CUBE - 1 : q);
-    }
-    for (v = 0; v < BG_CUBE; ++v)
-      centre[v] = (int) (255.0 * ((v + 0.5) / BG_CUBE) * ((v + 0.5) / BG_CUBE) + 0.5);
-    for (r = 0; r < BG_CUBE; ++r)
-      for (g = 0; g < BG_CUBE; ++g)
-        for (b = 0; b < BG_CUBE; ++b)
-        {
-          int cr = centre[r], cg = centre[g], cb = centre[b], i, best = 0;
-          long bd = 1L << 30;
-
-          for (i = 0; i < 255; ++i)
-          {
-            long dr = pal[i * 3] - cr, dg = pal[i * 3 + 1] - cg, db = pal[i * 3 + 2] - cb;
-            long d = dr * dr * 3 + dg * dg * 4 + db * db * 2;   // the eye cares most about green
-
-            if (d < bd)
-            {
-              bd = d;
-              best = i;
-            }
-          }
-          nearest_cube[(r * BG_CUBE + g) * BG_CUBE + b] = (byte) best;
-        }
-  }
+  bg_NNFree(nearest_cube);
+  nearest_cube = bg_NNBuild(pal, 3, 4, 2);
 }
 
 // The darkest colormap rows are not black (a ramp's last shade is a faint colour), so a sector at light 0 still shows
@@ -1755,7 +1721,7 @@ static double bg_RowFade(int row)
 
 // Fades the darkest rows of a colormap towards black, in place. Called on a private copy when the colormaps are
 // loaded, so every drawing path (ours and the plain one for walls and flats no light reaches) sees the same black.
-void bg_FadeColormap(byte* cm, const byte* pal)
+void bg_FadeColormap(pixel_t* cm, const byte* pal)
 {
   int row, i, j;
 
@@ -1767,23 +1733,34 @@ void bg_FadeColormap(byte* cm, const byte* pal)
 
     if (f >= 1.0)
       continue;
-    for (i = 0; i < 255; ++i)
+    for (i = 0; i < BG_NUMCOLORS; ++i)
     {
-      const byte* d = pal + 3 * (int) cm[row * 256 + i];
-      int r = (int) (d[0] * f + 0.5), g = (int) (d[1] * f + 0.5), b = (int) (d[2] * f + 0.5), best = 0;
+      const byte* d;
+      int r, g, b, best = 0;
       long bd = 1L << 30;
+
+      if ((i & 255) == 255)
+        continue;                                   // the spare colour stays as it is
+      d = pal + 3 * (int) cm[row * BG_NUMCOLORS + i];
+      r = (int) (d[0] * f + 0.5);
+      g = (int) (d[1] * f + 0.5);
+      b = (int) (d[2] * f + 0.5);
 
       // too dark to tell apart: true black (otherwise the darkest bluish palette colour wins for every dark hue and
       // far walls turn into flat dark-blue panels)
       if (r < 14 && g < 14 && b < 14)
       {
-        cm[row * 256 + i] = 0;
+        cm[row * BG_NUMCOLORS + i] = 0;
         continue;
       }
-      for (j = 0; j < 255; ++j)
+      for (j = 0; j < BG_NUMCOLORS; ++j)
       {
-        long dr = pal[j * 3] - r, dg = pal[j * 3 + 1] - g, db = pal[j * 3 + 2] - b;
-        long dd = dr * dr + dg * dg + db * db;   // plain distance: keeps the hue of what is faded
+        long dr, dg, db, dd;
+
+        if ((j & 255) == 255)
+          continue;
+        dr = pal[j * 3] - r; dg = pal[j * 3 + 1] - g; db = pal[j * 3 + 2] - b;
+        dd = dr * dr + dg * dg + db * db;   // plain distance: keeps the hue of what is faded
 
         if (dd < bd)
         {
@@ -1791,28 +1768,28 @@ void bg_FadeColormap(byte* cm, const byte* pal)
           best = j;
         }
       }
-      cm[row * 256 + i] = (byte) best;
+      cm[row * BG_NUMCOLORS + i] = (pixel_t) best;
     }
   }
 }
 
-static const byte* bg_TintTable(int tint, int mq, int row)   // tint = colour code + 1
+static const lighttable_t* bg_TintTable(int tint, int mq, int row)   // tint = colour code + 1
 {
-  byte** slot = &tint_cache[tint][mq][row];
+  pixel_t** slot = &tint_cache[tint][mq][row];
 
   if (!*slot)
   {
     const byte* pal = cache_pal;
-    byte* t = malloc(256);
+    pixel_t* t = malloc(BG_NUMCOLORS * sizeof(pixel_t));
     double m = (double) mq / BG_TINT_STEPS;
     int i, c;
     double tc[3] = { (double) ((tint - 1) / (BG_COLOUR_LEVELS * BG_COLOUR_LEVELS)) / (BG_COLOUR_LEVELS - 1),
                      (double) (((tint - 1) / BG_COLOUR_LEVELS) % BG_COLOUR_LEVELS) / (BG_COLOUR_LEVELS - 1),
                      (double) ((tint - 1) % BG_COLOUR_LEVELS) / (BG_COLOUR_LEVELS - 1) };
 
-    for (i = 0; i < 256; ++i)
+    for (i = 0; i < BG_NUMCOLORS; ++i)
     {
-      const byte* d = pal + 3 * (int) cache_cmap[row * 256 + i];
+      const byte* d = pal + 3 * (int) cache_cmap[row * BG_NUMCOLORS + i];
       const byte* sc = pal + 3 * i;
       int out[3];
 
@@ -3243,7 +3220,7 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
 {
   unsigned h;
   int i;
-  byte* t;
+  pixel_t* t;
   double f, fc[3];
   const byte* pal = cache_pal;
 
@@ -3253,7 +3230,7 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
   {
     fog_hkey = calloc(BG_FOG_HASH, sizeof *fog_hkey);
     fog_hidx = calloc(BG_FOG_HASH, sizeof *fog_hidx);
-    fog_pool = malloc((size_t) BG_FOG_SLOTS * 256);
+    fog_pool = malloc((size_t) BG_FOG_SLOTS * BG_NUMCOLORS * sizeof(pixel_t));
     fog_count = 0;
   }
   h = (unsigned) ((key * 0x9E3779B97F4A7C15ULL) >> 51) & (BG_FOG_HASH - 1);
@@ -3287,7 +3264,7 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
     }
   }
   t = fog_pool[fog_count];
-  for (i = 0; i < 256; ++i)
+  for (i = 0; i < BG_NUMCOLORS; ++i)
   {
     const byte* c = pal + 3 * (int) base[i];
     int r = (int) (c[0] + (fc[0] - c[0]) * f + 0.5), g = (int) (c[1] + (fc[1] - c[1]) * f + 0.5),
@@ -3306,7 +3283,7 @@ static const lighttable_t* bg_KeyColormap(bg_key_t key)
   const lighttable_t* base;
 
   if (tint == 0 || !nearest_cube)
-    base = fullcolormap + row * 256;
+    base = fullcolormap + row * BG_NUMCOLORS;
   else
     base = bg_TintTable(tint, mq, row);
   return (key >> 18) ? bg_FogTable(key, base) : base;
@@ -3518,9 +3495,9 @@ static int bg_BaseRow(const lighttable_t* cm)
   if (!cm || !fullcolormap)
     return -1;
   d = (long) (cm - fullcolormap);
-  if (d < 0 || d >= 32 * 256 || (d & 255))
+  if (d < 0 || d >= 32 * BG_NUMCOLORS || (d & (BG_NUMCOLORS - 1)))
     return -1;
-  return (int) (d >> 8);
+  return (int) (d >> BG_COLORBITS);
 }
 
 typedef struct
@@ -4073,7 +4050,7 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
     {
       int dy = y - H->cy;
       double t = 1.0 - (double) (dx * dx + dy * dy) / (double) r2, a;
-      byte* p;
+      pixel_t* p;
       const byte* c;
       int r, g, b;
 
@@ -4602,7 +4579,7 @@ void bg_DrawWeather(int i, const int* floorclip, const int* ceilingclip)
     for (y = y0; y <= y1; ++y)
     {
       double aa = a;
-      byte* p = drawvars.topleft + y * drawvars.pitch + x;
+      pixel_t* p = drawvars.topleft + y * drawvars.pitch + x;
       const byte* c = pal + 3 * (int) *p;
       int r, g, b;
 

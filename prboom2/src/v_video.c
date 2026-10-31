@@ -50,6 +50,7 @@
 #include "m_bbox.h"
 #include "w_wad.h"   /* needed for color translation lump lookup */
 #include "v_video.h"
+#include "dsda/bgcolor.h"
 #include "i_video.h"
 #include "lprintf.h"
 #include "st_stuff.h"
@@ -78,7 +79,7 @@ int psprite_offset; // Needed for "tallscreen" modes
 screeninfo_t screens[NUM_SCREENS];
 
 /* jff 4/24/98 initialize this at runtime */
-const byte *colrngs[CR_LIMIT];
+const pixel_t *colrngs[CR_LIMIT];
 
 int usegamma;
 
@@ -101,19 +102,24 @@ int V_BloodColor(int blood)
 // so it can be considered GPL as used here, rather than BSD. But,
 // I don't care either way. It is effectively dual-licensed I suppose.
 
-unsigned int Col2RGB8[65][256];
-byte RGB32k[32][32][32];
+unsigned int Col2RGB8[65][BG_NUMCOLORS];
+pixel_t RGB32k[32][32][32];
 
 #define MAKECOLOR(a) (((a)<<3)|((a)>>2))
 
+static int flexTranInit = false;
+
+void V_ResetFlexTranTable(void)
+{
+  flexTranInit = false;   // the palette changed: made again when next needed
+}
+
 void V_InitFlexTranTable(void)
 {
-  static int flexTranInit = false;
-
   if (!flexTranInit)
   {
     int r, g, b, x, y, pos;
-    const unsigned char *palette = V_GetPlaypal();
+    const unsigned char *palette = V_GetColorPalette();
 
     // mark that we've initialized the flex tran table
     flexTranInit = true;
@@ -135,7 +141,7 @@ void V_InitFlexTranTable(void)
     for(x = 0; x < 65; x++)
     {
       pos = 0;
-      for(y = 0; y < 256; y++)
+      for(y = 0; y < BG_NUMCOLORS; y++)
       {
         Col2RGB8[x][y] =
           (((palette[pos + 0] * x) >> 4) << 20) |
@@ -148,15 +154,31 @@ void V_InitFlexTranTable(void)
   }
 }
 
+// The colour range tables (the text colours of the HUD and menus) are made for the first 256 colours and widened to the
+// whole palette; the 256-colour form is kept for when the palette changes.
+static byte* cr_table8;
+static pixel_t* cr_table_wide;
+
+void V_RebuildColorTranslation(void)
+{
+  int i;
+
+  if (!cr_table8 || !cr_table_wide)
+    return;
+  for (i = 0; i < CR_LIMIT; ++i)
+    bg_WidenRemap(cr_table8 + 256 * i, cr_table_wide + (size_t) BG_NUMCOLORS * i);
+}
+
 void V_InitColorTranslation(void)
 {
   int i;
-  byte* full_table;
 
-  full_table = dsda_GenerateCRTable();
+  cr_table8 = dsda_GenerateCRTable();
+  cr_table_wide = Z_Malloc((size_t) CR_LIMIT * BG_NUMCOLORS * sizeof(pixel_t));
+  V_RebuildColorTranslation();
 
   for (i = 0; i < CR_LIMIT; ++i)
-    colrngs[i] = full_table + 256 * i;
+    colrngs[i] = cr_table_wide + BG_NUMCOLORS * i;
 
   dsda_LoadTextColor();
 }
@@ -177,8 +199,8 @@ static void FUNC_V_CopyRect(int srcscrn, int destscrn,
                 int x, int y, int width, int height,
                 enum patch_translation_e flags)
 {
-  byte *src;
-  byte *dest;
+  pixel_t *src;
+  pixel_t *dest;
 
   if (flags & VPT_STRETCH_MASK)
   {
@@ -228,7 +250,7 @@ static void FUNC_V_CopyRect(int srcscrn, int destscrn,
 
   for ( ; height>0 ; height--)
     {
-      memcpy (dest, src, width);
+      memcpy (dest, src, width * sizeof(pixel_t));
       src += screens[srcscrn].pitch;
       dest += screens[destscrn].pitch;
     }
@@ -236,7 +258,7 @@ static void FUNC_V_CopyRect(int srcscrn, int destscrn,
 
 #define FILL_FLAT(dest_type, dest_pitch, pal_func)\
 {\
-  const byte *src, *src_p;\
+  const pixel_t *src, *src_p;\
   dest_type *dest, *dest_p;\
   for (sy = y ; sy < y + height; sy += 64)\
   {\
@@ -264,8 +286,8 @@ static void FUNC_V_CopyRect(int srcscrn, int destscrn,
 
 static void FUNC_V_FillFlat(int lump, int scrn, int x, int y, int width, int height, enum patch_translation_e flags)
 {
-  const byte *data;
-  byte *dest;
+  const pixel_t *data;
+  pixel_t *dest;
   int sx, sy;
   int pitch, src_x_offset, src_y_offset;
   float ratio_x, ratio_y;
@@ -273,7 +295,7 @@ static void FUNC_V_FillFlat(int lump, int scrn, int x, int y, int width, int hei
 
   stretch = dsda_StretchParams(flags);
   pitch = screens[scrn].pitch;
-  data = W_LumpByNum(lump + firstflat);
+  data = R_GetFlatPixels(lump + firstflat);
 
   ratio_x = stretch->video->width / 320.f;
   ratio_y = stretch->video->height / 200.f;
@@ -354,18 +376,18 @@ void V_Init (void)
 static void V_DrawMemPatch(int x, int y, int scrn, const rpatch_t *patch,
         dboolean center, int cm, enum patch_translation_e flags)
 {
-  const byte *trans;
+  const pixel_t *trans;
 
   stretch_param_t *params;
 
   if (cm == CR_DEFAULT)
     trans = &colormaps[0][0];
   else if (cm == CR_DARKEN)
-    trans = &colormaps[0][256 * 15];
+    trans = &colormaps[0][BG_NUMCOLORS * 15];
   else if (cm < CR_LIMIT)
     trans = colrngs[cm];
   else
-    trans = translationtables + 256*((cm - CR_LIMIT) - 1);
+    trans = translationtables + BG_NUMCOLORS*((cm - CR_LIMIT) - 1);
 
   if (!(flags & VPT_NOOFFSET))
   {
@@ -392,7 +414,7 @@ static void V_DrawMemPatch(int x, int y, int scrn, const rpatch_t *patch,
 
   if (!(flags & VPT_STRETCH_MASK)) {
     int             col;
-    byte           *desttop = screens[scrn].data+y*screens[scrn].pitch+x;
+    pixel_t        *desttop = screens[scrn].data+y*screens[scrn].pitch+x;
     int    w = patch->width;
 
     if (y<0 || y+patch->height > ((flags & VPT_STRETCH) ? 200 :  SCREENHEIGHT)) {
@@ -419,14 +441,14 @@ static void V_DrawMemPatch(int x, int y, int scrn, const rpatch_t *patch,
         const rpost_t *post = &column->posts[i];
         // killough 2/21/98: Unrolled and performance-tuned
 
-        const byte *source = column->pixels + post->topdelta;
-        byte *dest = desttop + post->topdelta*screens[scrn].pitch;
+        const pixel_t *source = column->pixels + post->topdelta;
+        pixel_t *dest = desttop + post->topdelta*screens[scrn].pitch;
         int count = post->length;
 
         if (!(flags & VPT_TRANS)) {
           if ((count-=4)>=0)
             do {
-              register byte s0,s1;
+              register pixel_t s0,s1;
               s0 = source[0];
               s1 = source[1];
               dest[0] = s0;
@@ -448,7 +470,7 @@ static void V_DrawMemPatch(int x, int y, int scrn, const rpatch_t *patch,
           // CPhipps - merged translation code here
           if ((count-=4)>=0)
             do {
-              register byte s0,s1;
+              register pixel_t s0,s1;
               s0 = source[0];
               s1 = source[1];
               s0 = trans[s0];
@@ -635,8 +657,8 @@ static void FUNC_V_DrawShaded(int scrn, int x, int y, int width, int height, int
 {
   const lighttable_t *darkcolormap;
   extern dboolean LevelUseFullBright;
-  extern const byte* colormap_lump;
-  byte* dest;
+  extern const pixel_t* colormap_lump;
+  pixel_t* dest;
   int ix, iy;
 
   // Compensate for Hexen FOGMAP
@@ -648,7 +670,7 @@ static void FUNC_V_DrawShaded(int scrn, int x, int y, int width, int height, int
 
     for (ix = x; ix < x + width; ++ix)
     {
-      *dest = darkcolormap[shade * 256 + dest[scrn]];
+      *dest = darkcolormap[shade * BG_NUMCOLORS + dest[scrn]];
       dest++;
     }
   }
@@ -682,12 +704,12 @@ static int currentPaletteIndex = 0;
 //
 void V_TintRect(int x, int y, int w, int h, int pal)
 {
-  static byte tables[32][256];
+  static pixel_t tables[32][BG_NUMCOLORS];
   static int built[32];
   static const unsigned char* built_for;
   const unsigned char* playpal = V_GetPlaypal();
   int i, ix, iy;
-  byte* map;
+  pixel_t* map;
 
   if (pal <= 0 || pal >= 32 || pal >= V_GetPlaypalCount() || !playpal || V_IsOpenGLMode())
     return;
@@ -707,16 +729,16 @@ void V_TintRect(int x, int y, int w, int h, int pal)
   map = tables[pal];
   if (!built[pal])
   {
-    const unsigned char* c = playpal + pal * 768;
+    const unsigned char* c = V_GetColorPaletteFor(pal);
 
-    for (i = 0; i < 256; ++i)
+    for (i = 0; i < BG_NUMCOLORS; ++i)
       map[i] = RGB32k[c[i * 3] >> 3][c[i * 3 + 1] >> 3][c[i * 3 + 2] >> 3];
     built[pal] = 1;
   }
 
   for (iy = y; iy < y + h; ++iy)
   {
-    byte* dest = screens[0].data + screens[0].pitch * iy + x;
+    pixel_t* dest = screens[0].data + screens[0].pitch * iy + x;
 
     for (ix = 0; ix < w; ++ix)
       dest[ix] = map[dest[ix]];
@@ -749,6 +771,7 @@ void V_SetPlayPal(int playpal_i)
 {
   dsda_SetPlayPal(playpal_i);
   R_UpdatePlayPal();
+  R_UpdatePaletteTables();
   V_SetPalette(currentPaletteIndex);
 
   if (V_IsOpenGLMode())
@@ -761,20 +784,22 @@ void V_SetPlayPal(int playpal_i)
 // V_FillRect
 //
 // CPhipps - New function to fill a rectangle with a given colour
-static void V_FillRect8(int scrn, int x, int y, int width, int height, byte colour)
+static void V_FillRect8(int scrn, int x, int y, int width, int height, pixel_t colour)
 {
-  byte* dest = screens[scrn].data + x + y*screens[scrn].pitch;
+  pixel_t* dest = screens[scrn].data + x + y*screens[scrn].pitch;
   while (height--) {
-    memset(dest, colour, width);
+    int i;
+    for (i = 0; i < width; i++)
+      dest[i] = colour;
     dest += screens[scrn].pitch;
   }
 }
 
 static void WRAP_V_DrawLine(fline_t* fl, int color);
-static void V_PlotPixel8(int scrn, int x, int y, byte color);
+static void V_PlotPixel8(int scrn, int x, int y, pixel_t color);
 
 static void WRAP_V_DrawLineWu(fline_t* fl, int color);
-static void V_PlotPixelWu8(int scrn, int x, int y, byte color, int weight);
+static void V_PlotPixelWu8(int scrn, int x, int y, pixel_t color, int weight);
 
 static void WRAP_gld_BeginUIDraw(void)
 {
@@ -800,7 +825,7 @@ static void WRAP_gld_EndMenuDraw(void)
 {
   gld_EndMenuDraw();
 }
-static void WRAP_gld_FillRect(int scrn, int x, int y, int width, int height, byte colour)
+static void WRAP_gld_FillRect(int scrn, int x, int y, int width, int height, pixel_t colour)
 {
   gld_FillBlock(x,y,width,height,colour);
 }
@@ -827,11 +852,11 @@ static void WRAP_gld_DrawNumPatchPrecise(float x, float y, int scrn, int lump, d
 {
   gld_DrawNumPatch_f(x,y,lump,center,cm,flags);
 }
-static void V_PlotPixelGL(int scrn, int x, int y, byte color) {
+static void V_PlotPixelGL(int scrn, int x, int y, pixel_t color) {
   gld_DrawLine(x-1, y, x+1, y, color);
   gld_DrawLine(x, y-1, x, y+1, color);
 }
-static void V_PlotPixelWuGL(int scrn, int x, int y, byte color, int weight) {
+static void V_PlotPixelWuGL(int scrn, int x, int y, pixel_t color, int weight) {
   V_PlotPixelGL(scrn, x, y, color);
 }
 static void WRAP_gld_DrawLine(fline_t* fl, int color)
@@ -849,15 +874,15 @@ static void NULL_BeginAutomapDraw(void) {}
 static void NULL_EndAutomapDraw(void) {}
 static void NULL_BeginMenuDraw(void) {}
 static void NULL_EndMenuDraw(void) {}
-static void NULL_FillRect(int scrn, int x, int y, int width, int height, byte colour) {}
+static void NULL_FillRect(int scrn, int x, int y, int width, int height, pixel_t colour) {}
 static void NULL_CopyRect(int srcscrn, int destscrn, int x, int y, int width, int height, enum patch_translation_e flags) {}
 static void NULL_FillFlat(int lump, int n, int x, int y, int width, int height, enum patch_translation_e flags) {}
 static void NULL_FillPatch(int lump, int n, int x, int y, int width, int height, enum patch_translation_e flags) {}
 static void NULL_DrawBackground(const char *flatname, int n) {}
 static void NULL_DrawNumPatch(int x, int y, int scrn, int lump, dboolean center, int cm, enum patch_translation_e flags) {}
 static void NULL_DrawNumPatchPrecise(float x, float y, int scrn, int lump, dboolean center, int cm, enum patch_translation_e flags) {}
-static void NULL_PlotPixel(int scrn, int x, int y, byte color) {}
-static void NULL_PlotPixelWu(int scrn, int x, int y, byte color, int weight) {}
+static void NULL_PlotPixel(int scrn, int x, int y, pixel_t color) {}
+static void NULL_PlotPixelWu(int scrn, int x, int y, pixel_t color, int weight) {}
 static void NULL_DrawLine(fline_t* fl, int color) {}
 static void NULL_DrawLineWu(fline_t* fl, int color) {}
 static void NULL_DrawShaded(int scrn, int x, int y, int width, int height, int shade) {}
@@ -967,7 +992,7 @@ void V_AllocScreen(screeninfo_t *scrn) {
   if (!scrn->not_on_heap)
     if ((scrn->pitch * scrn->height) > 0)
       //e6y: Clear the screen to black.
-      scrn->data = Z_Calloc(scrn->pitch*scrn->height, 1);
+      scrn->data = Z_Calloc(scrn->pitch*scrn->height, sizeof(pixel_t));
 }
 
 //
@@ -1000,11 +1025,11 @@ void V_FreeScreens(void) {
     V_FreeScreen(&screens[i]);
 }
 
-static void V_PlotPixel8(int scrn, int x, int y, byte color) {
+static void V_PlotPixel8(int scrn, int x, int y, pixel_t color) {
   screens[scrn].data[x+screens[scrn].pitch*y] = color;
 }
 
-#define PUTDOT(xx,yy,cc) V_PlotPixel(0,xx,yy,(byte)cc)
+#define PUTDOT(xx,yy,cc) V_PlotPixel(0,xx,yy,(pixel_t)cc)
 
 //
 // WRAP_V_DrawLine()
@@ -1090,12 +1115,6 @@ static void WRAP_V_DrawLine(fline_t* fl, int color)
   }
 }
 
-extern SDL_Surface *screen;
-#define RGB2COLOR(r, g, b)\
-  ((r >> screen->format->Rloss) << screen->format->Rshift) |\
-  ((g >> screen->format->Gloss) << screen->format->Gshift) |\
-  ((b >> screen->format->Bloss) << screen->format->Bshift)\
-
 // Given 65536, we need 2048; 65536 / 2048 == 32 == 2^5
 // Why 2048? ANG90 == 0x40000000 which >> 19 == 0x800 == 2048.
 // The trigonometric correction is based on an angle from 0 to 90.
@@ -1111,7 +1130,7 @@ extern SDL_Surface *screen;
 //
 // haleyjd 06/13/09: Pixel plotter for Wu line drawing.
 //
-static void V_PlotPixelWu8(int scrn, int x, int y, byte color, int weight)
+static void V_PlotPixelWu8(int scrn, int x, int y, pixel_t color, int weight)
 {
   unsigned int bg_color = screens[scrn].data[x+screens[scrn].pitch*y];
   unsigned int *fg2rgb = Col2RGB8[weight];
@@ -1188,9 +1207,9 @@ void WRAP_V_DrawLineWu(fline_t *fl, int color)
       y += 1; // advance y
 
       // the trick is in the trig!
-      V_PlotPixelWu(0, x, y, (byte)color,
+      V_PlotPixelWu(0, x, y, (pixel_t)color,
         finecosine[erroracc >> wu_fineshift] >> wu_fixedshift);
-      V_PlotPixelWu(0, x + xdir, y, (byte)color,
+      V_PlotPixelWu(0, x + xdir, y, (pixel_t)color,
         finesine[erroracc >> wu_fineshift] >> wu_fixedshift);
     }
   }
@@ -1213,9 +1232,9 @@ void WRAP_V_DrawLineWu(fline_t *fl, int color)
       x += xdir; // advance x
 
       // the trick is in the trig!
-      V_PlotPixelWu(0, x, y, (byte)color,
+      V_PlotPixelWu(0, x, y, (pixel_t)color,
         finecosine[erroracc >> wu_fineshift] >> wu_fixedshift);
-      V_PlotPixelWu(0, x, y + 1, (byte)color,
+      V_PlotPixelWu(0, x, y + 1, (pixel_t)color,
         finesine[erroracc >> wu_fineshift] >> wu_fixedshift);
     }
   }
@@ -1243,8 +1262,42 @@ const unsigned char* V_GetPlaypal(void)
   return playpal_data->lump;
 }
 
+//
+// The colour palette the screen is actually drawn with: BG_NUMCOLORS RGB triplets per sub-palette
+// (PLAYPAL1-3 sub-palette `pal` -- damage/pickup flashes etc.).  With 256 colours this is the
+// PLAYPAL itself; with 512 it is the PLAYPAL extended with generated in-between colours.
+//
+const unsigned char* V_GetColorPaletteFor(int pal)
+{
+#if BG_COLORBITS == 8
+  return V_GetPlaypal() + pal * PALETTE_SIZE;
+#else
+  // a wad can paint the in-between colours itself: PLAYPALX, PLAYPAL1X ... (see dsda/bgcolor.h)
+  const unsigned char* base = V_GetPlaypal();
+  const unsigned char* extra = NULL;
+  int extra_len = 0;
+  char name[16];
+  int lump;
+
+  snprintf(name, sizeof name, "%sX", dsda_PlayPalData(playpal_index)->lump_name);
+  lump = W_CheckNumForName(name);
+  if (lump != LUMP_NOT_FOUND)
+  {
+    extra = W_LumpByNum(lump);
+    extra_len = W_LumpLength(lump);
+  }
+  return bg_WidePalette(base, V_GetPlaypalCount(), pal, extra, extra_len);
+#endif
+}
+
+const unsigned char* V_GetColorPalette(void)
+{
+  return V_GetColorPaletteFor(0);
+}
+
 void V_FreePlaypal(void)
 {
+  bg_PaletteChanged();
   dsda_FreeAllPlayPals();
 }
 
@@ -1264,52 +1317,41 @@ SDL_Color V_GetPatchColor (int lumpnum)
 {
   SDL_Color col = {0,0,0,0};
   int r = 0, g = 0, b = 0;
-  const unsigned char *playpal = V_GetPlaypal();
-  int x, y, pixel_cnt = 0;
-  const byte* lump;
-  short width;
-
-  lump = W_LumpByNum(lumpnum);
-
-  width = *((const int16_t *) lump);
-  width = LittleShort(width);
+  const unsigned char *playpal = V_GetColorPalette();
+  int x, y, i, pixel_cnt = 0;
+  const rpatch_t* patch = R_PatchByNum(lumpnum);
+  int width = patch->width;
 
   for (x = 0; x < width; ++x) {
-    byte length;
-    byte entry;
-    const byte* p;
-    int32_t offset;
+    const rcolumn_t* column;
 
     // Only calculate for the leftmost and rightmost 16 columns
     if (width > 32 && x > 16 && x < width - 16)
       continue;
 
-    // Skip irrelevant data in the doom patch header
-    p = lump + 8 + 4 * x;
-    offset = *((const int32_t *) p);
-    p = lump + LittleLong(offset);
-
-    while (*p != 0xff) {
-      p++;
-      length = *p++;
-      p++;
+    column = R_GetPatchColumn(patch, x);
+    for (i = 0; i < column->numPosts; ++i) {
+      const rpost_t* post = &column->posts[i];
 
       // Get RGB values per pixel
-      for (y = 0; y < length; ++y) {
-        entry = *p++;
+      for (y = 0; y < post->length; ++y) {
+        int entry = column->pixels[post->topdelta + y];
+
         r += playpal[3 * entry + 0];
         g += playpal[3 * entry + 1];
         b += playpal[3 * entry + 2];
         pixel_cnt++;
       }
-      p++;
     }
   }
 
   // Average RGB values
-  col.r = r / pixel_cnt;
-  col.g = g / pixel_cnt;
-  col.b = b / pixel_cnt;
+  if (pixel_cnt)
+  {
+    col.r = r / pixel_cnt;
+    col.g = g / pixel_cnt;
+    col.b = b / pixel_cnt;
+  }
 
   return col;
 }
@@ -1515,13 +1557,18 @@ void V_GetWideRect(int *x, int *y, int *w, int *h, enum patch_translation_e flag
 //
 int V_BestColor(const unsigned char *palette, int r, int g, int b)
 {
+  return V_BestColorN(palette, BG_NUMCOLORS, r, g, b);
+}
+
+int V_BestColorN(const unsigned char *palette, int count, int r, int g, int b)
+{
   int color;
 
   // use color 0 as a worst-case match for any color
   int bestcolor = 0;
   int bestdist = 257 * 257 + 257 * 257 + 257 * 257;
 
-  for (color = 0; color < 256; color++)
+  for (color = 0; color < count; color++)
   {
     int dr, dg, db, dist;
 
@@ -1561,13 +1608,13 @@ void V_ChangeScreenResolution(void)
   }
 }
 
-void V_FillRectVPT(int scrn, int x, int y, int width, int height, byte color, enum patch_translation_e flags)
+void V_FillRectVPT(int scrn, int x, int y, int width, int height, pixel_t color, enum patch_translation_e flags)
 {
   V_GetWideRect(&x, &y, &width, &height, flags);
   V_FillRect(scrn, x, y, width, height, color);
 }
 
-int V_FillHeightVPT(int scrn, int y, int height, byte color, enum patch_translation_e flags)
+int V_FillHeightVPT(int scrn, int y, int height, pixel_t color, enum patch_translation_e flags)
 {
   stretch_param_t *params = dsda_StretchParams(flags);
   int sy = y;

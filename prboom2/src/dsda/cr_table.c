@@ -215,7 +215,7 @@ static int dsda_BrightenPaletteEntry(const byte *playpal, int entry)
   target_g = (int)(target_g * scale + 0.5);
   target_b = (int)(target_b * scale + 0.5);
 
-  return V_BestColor(playpal, target_r, target_g, target_b);
+  return V_BestColorN(playpal, 256, target_r, target_g, target_b);
 }
 
 byte* dsda_GenerateCRTable(void) {

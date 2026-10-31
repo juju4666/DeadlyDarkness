@@ -436,7 +436,7 @@ typedef struct mobj_s
 
     // misc
     byte color;
-    const byte* tranmap;
+    const pixel_t* tranmap;
 
     // SEE WARNING ABOVE ABOUT POINTER FIELDS!!!
 } mobj_t;

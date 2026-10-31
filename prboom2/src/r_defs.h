@@ -349,7 +349,7 @@ typedef struct line_s
   automap_style_t automap_style;
   int health;
   int healthgroup;
-  const byte* tranmap;
+  const pixel_t* tranmap;
   float alpha;
 } line_t;
 
@@ -459,7 +459,7 @@ typedef struct
 // from darkening PLAYPAL to all black.
 // Could use even more than 32 levels.
 
-typedef byte  lighttable_t;
+typedef pixel_t  lighttable_t;
 
 //
 // Masked 2s linedefs
@@ -517,7 +517,7 @@ typedef struct vissprite_s
   fixed_t floorclip;
 
   // zdoom
-  const byte* tranmap;
+  const pixel_t* tranmap;
 
   // misc
   int color;

@@ -556,19 +556,19 @@ void dsda_BgSplitSelfTest(void)
   // per-view flashes: a view tinted red turns its pixels reddish, the rest of the screen stays
   if (V_IsSoftwareMode() && screens[0].data && V_GetPlaypalCount() > 1)
   {
-    const unsigned char* pp = V_GetPlaypal();
-    byte* p0 = screens[0].data;
-    byte* p1 = screens[0].data + 1;
-    byte keep0 = *p0, keep1 = *p1;
+    const unsigned char* pp = V_GetColorPalette();
+    pixel_t* p0 = screens[0].data;
+    pixel_t* p1 = screens[0].data + 1;
+    pixel_t keep0 = *p0, keep1 = *p1;
     int c = V_BestColor(pp, 120, 120, 120);
     int pal_red = 1, r, g, b;
 
-    *p0 = (byte) c;
-    *p1 = (byte) c;
+    *p0 = (pixel_t) c;
+    *p1 = (pixel_t) c;
     V_TintRect(0, 0, 1, 1, pal_red);
     r = pp[*p0 * 3]; g = pp[*p0 * 3 + 1]; b = pp[*p0 * 3 + 2];
     SCHECK(r > g + 20 && r > b + 20, "split: a view with a damage flash looks red");
-    SCHECK(*p1 == (byte) c, "split: the next view is not tinted");
+    SCHECK(*p1 == (pixel_t) c, "split: the next view is not tinted");
     *p0 = keep0;
     *p1 = keep1;
   }

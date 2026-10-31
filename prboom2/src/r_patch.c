@@ -180,6 +180,38 @@ int R_NumPatchHeight(int lump)
 }
 
 //---------------------------------------------------------------------------
+// Wide patches. A patch lump that starts with the four bytes "BGW1" is a patch for the wide palette: after the magic
+// comes an ordinary patch header (width, height, leftoffset, topoffset, columnofs[width], the offsets counted from the
+// byte after the magic), and the posts are [topdelta][length][length 16-bit little-endian palette indices], a column
+// ending in 0xFF. Every pixel can be any of the BG_NUMCOLORS colours. A classic patch is read as before. The column
+// readers below work on either; rp_wide says which one the patch being read is.
+//---------------------------------------------------------------------------
+static int rp_wide;
+
+static dboolean rp_IsWideLump(const void *base, int size)
+{
+  return size >= 16 && !memcmp(base, "BGW1", 4);
+}
+
+static const patch_t *rp_Header(const void *base, int size)
+{
+  rp_wide = rp_IsWideLump(base, size);
+  return (const patch_t *)((const byte *)base + (rp_wide ? 4 : 0));
+}
+
+static const column_t *rp_Next(const column_t *c)
+{
+  return (const column_t *)((const byte *)c + (rp_wide ? 2 + 2 * c->length : c->length + 4));
+}
+
+static pixel_t rp_Pixel(const column_t *c, int k)
+{
+  const byte *p = (const byte *)c;
+
+  return rp_wide ? (pixel_t)((p[2 + 2 * k] | (p[3 + 2 * k] << 8)) & (BG_NUMCOLORS - 1)) : (pixel_t)p[3 + k];
+}
+
+//---------------------------------------------------------------------------
 static int getPatchIsNotTileable(const patch_t *patch) {
   int x=0, numPosts, lastColumnDelta = 0;
   const column_t *column;
@@ -200,7 +232,7 @@ static int getPatchIsNotTileable(const patch_t *patch) {
       else if (x == LittleShort(patch->width)-1 && column->topdelta + column->length >= LittleShort(patch->height)) cornerCount++;
 
       if (numPosts++) hasAHole = 1;
-      column = (const column_t *)((const byte *)column + column->length + 4);
+      column = rp_Next(column);
     }
   }
 
@@ -214,7 +246,7 @@ static int getIsSolidAtSpot(const column_t *column, int spot) {
   while (column->topdelta != 0xff) {
     if (spot < column->topdelta) return 0;
     if ((spot >= column->topdelta) && (spot <= column->topdelta + column->length)) return 1;
-    column = (const column_t*)((const byte*)column + 3 + column->length + 1);
+    column = rp_Next(column);
   }
   return 0;
 }
@@ -236,7 +268,7 @@ static int getColumnEdgeSlope(const column_t *prevcolumn, const column_t *nextco
 static void FillEmptySpace(rpatch_t *patch)
 {
   int x, y, w, h, numpix, pass, transparent, has_holes;
-  byte *orig, *copy, *src, *dest, *prev, *next;
+  pixel_t *orig, *copy, *src, *dest, *prev, *next;
 
   // loop over patch looking for transparent pixels next to solid ones
   // copy solid pixels into the spaces, dilating the patch outwards
@@ -249,7 +281,7 @@ static void FillEmptySpace(rpatch_t *patch)
 
   // alternate between two buffers to avoid "overlapping memcpy"-like symptoms
   orig = patch->pixels;
-  copy = Z_Malloc(numpix);
+  copy = Z_Malloc(numpix * sizeof(pixel_t));
 
   for (pass = 0; pass < 8; pass++) // arbitrarily chosen limit (must be even)
   {
@@ -294,7 +326,7 @@ static void FillEmptySpace(rpatch_t *patch)
     if (transparent == 0) // no more transparent pixels to fill
     {
       if ((pass & 1) == 0) // dest was copy, src was orig: orig needs update
-        memcpy(orig, copy, numpix);
+        memcpy(orig, copy, numpix * sizeof(pixel_t));
       break;
     }
     else if (transparent == numpix)
@@ -330,6 +362,7 @@ dboolean R_IsPatchLump(int lumpnum)
   int width, height;
   const patch_t * patch;
   dboolean result;
+  int wide;
 
   size = W_LumpLength(lumpnum);
 
@@ -337,7 +370,10 @@ dboolean R_IsPatchLump(int lumpnum)
   if (size < 13)
     return false;
 
-  patch = (const patch_t *)W_LumpByNum(lumpnum);
+  patch = rp_Header(W_LumpByNum(lumpnum), size);
+  wide = rp_wide;
+  if (wide)
+    size -= 4;            // the column offsets of a wide patch count from the byte after the magic
 
   width = LittleShort(patch->width);
   height = LittleShort(patch->height);
@@ -369,7 +405,7 @@ dboolean R_IsPatchLump(int lumpnum)
 }
 
 //---------------------------------------------------------------------------
-static void StorePixel(rpatch_t *patch, int x, int y, byte color)
+static void StorePixel(rpatch_t *patch, int x, int y, pixel_t color)
 {
   // write pixel to patch, substituting for playpal_transparent as needed
   if (color == playpal_transparent && playpal_duplicate >= 0)
@@ -390,7 +426,6 @@ static void createPatch(int id) {
   int dataSize;
   int *numPostsInColumn;
   int numPostsTotal;
-  const unsigned char *oldColumnPixelData;
   int numPostsUsedSoFar;
   int edgeSlope;
 
@@ -405,7 +440,7 @@ static void createPatch(int id) {
       (patchNum < numlumps ? lumpinfo[patchNum].name : NULL));
   }
 
-  oldPatch = (const patch_t*)W_LumpByNum(patchNum);
+  oldPatch = rp_Header(W_LumpByNum(patchNum), W_LumpLength(patchNum));
 
   patch = &patches[id];
   // proff - 2003-02-16 What about endianess?
@@ -430,7 +465,7 @@ static void createPatch(int id) {
   }
 
   // work out how much memory we need to allocate for this patch's data
-  pixelDataSize = (patch->width * patch->height + 4) & ~3;
+  pixelDataSize = ((patch->width * patch->height + 4) & ~3) * sizeof(pixel_t);
   columnsDataSize = sizeof(rcolumn_t) * patch->width;
 
   // count the number of posts in each column
@@ -443,7 +478,7 @@ static void createPatch(int id) {
     while (oldColumn->topdelta != 0xff) {
       numPostsInColumn[x]++;
       numPostsTotal++;
-      oldColumn = (const column_t *)((const byte *)oldColumn + oldColumn->length + 4);
+      oldColumn = rp_Next(oldColumn);
     }
   }
 
@@ -455,7 +490,7 @@ static void createPatch(int id) {
   memset(patch->data, 0, dataSize);
 
   // set out pixel, column, and post pointers into our data array
-  patch->pixels = patch->data;
+  patch->pixels = (pixel_t*)patch->data;
   patch->columns = (rcolumn_t*)((unsigned char*)patch->pixels + pixelDataSize);
   patch->posts = (rpost_t*)((unsigned char*)patch->columns + columnsDataSize);
 
@@ -463,7 +498,10 @@ static void createPatch(int id) {
   assert((((byte*)patch->posts  + numPostsTotal*sizeof(rpost_t)) - (byte*)patch->data) == dataSize);
 
   if (playpal_transparent != 0)
-    memset(patch->pixels, playpal_transparent, (patch->width*patch->height));
+  {
+    int k, n = patch->width * patch->height;
+    for (k = 0; k < n; k++) patch->pixels[k] = (pixel_t)playpal_transparent;
+  }
 
   // fill in the pixels, posts, and columns
   numPostsUsedSoFar = 0;
@@ -529,12 +567,11 @@ static void createPatch(int id) {
         else if (edgeSlope == -1) patch->posts[numPostsUsedSoFar].slope |= RDRAW_EDGESLOPE_BOT_DOWN;
 
         // fill in the post's pixels
-        oldColumnPixelData = (const byte *)oldColumn + 3;
         for (y=0; y<len; y++) {
-          StorePixel(patch, x, top + y, oldColumnPixelData[y]);
+          StorePixel(patch, x, top + y, rp_Pixel(oldColumn, y));
         }
       }
-      oldColumn = (const column_t *)((const byte *)oldColumn + oldColumn->length + 4);
+      oldColumn = rp_Next(oldColumn);
       numPostsUsedSoFar++;
     }
   }
@@ -596,7 +633,6 @@ static void createTextureCompositePatch(int id) {
   int postsDataSize;
   int dataSize;
   int numPostsTotal;
-  const unsigned char *oldColumnPixelData;
   int numPostsUsedSoFar;
   int edgeSlope;
   count_t *countsInColumn;
@@ -618,7 +654,7 @@ static void createTextureCompositePatch(int id) {
   composite_patch->flags = 0;
 
   // work out how much memory we need to allocate for this patch's data
-  pixelDataSize = (composite_patch->width * composite_patch->height + 4) & ~3;
+  pixelDataSize = ((composite_patch->width * composite_patch->height + 4) & ~3) * sizeof(pixel_t);
   columnsDataSize = sizeof(rcolumn_t) * composite_patch->width;
 
   // count the number of posts in each column
@@ -628,7 +664,7 @@ static void createTextureCompositePatch(int id) {
   for (i=0; i<texture->patchcount; i++) {
     texpatch = &texture->patches[i];
     patchNum = texpatch->patch;
-    oldPatch = (const patch_t*)W_LumpByNum(patchNum);
+    oldPatch = rp_Header(W_LumpByNum(patchNum), W_LumpLength(patchNum));
 
     for (x=0; x<LittleShort(oldPatch->width); x++) {
       int tx = texpatch->originx + x;
@@ -644,7 +680,7 @@ static void createTextureCompositePatch(int id) {
       while (oldColumn->topdelta != 0xff) {
         countsInColumn[tx].posts++;
         numPostsTotal++;
-        oldColumn = (const column_t *)((const byte *)oldColumn + oldColumn->length + 4);
+        oldColumn = rp_Next(oldColumn);
       }
     }
   }
@@ -657,7 +693,7 @@ static void createTextureCompositePatch(int id) {
   memset(composite_patch->data, 0, dataSize);
 
   // set out pixel, column, and post pointers into our data array
-  composite_patch->pixels = composite_patch->data;
+  composite_patch->pixels = (pixel_t*)composite_patch->data;
   composite_patch->columns = (rcolumn_t*)((unsigned char*)composite_patch->pixels + pixelDataSize);
   composite_patch->posts = (rpost_t*)((unsigned char*)composite_patch->columns + columnsDataSize);
 
@@ -665,8 +701,10 @@ static void createTextureCompositePatch(int id) {
   assert((((byte*)composite_patch->posts + numPostsTotal*sizeof(rpost_t)) - (byte*)composite_patch->data) == dataSize);
 
   if (playpal_transparent != 0)
-    memset(composite_patch->pixels, playpal_transparent,
-           (composite_patch->width*composite_patch->height));
+  {
+    int k, n = composite_patch->width * composite_patch->height;
+    for (k = 0; k < n; k++) composite_patch->pixels[k] = (pixel_t)playpal_transparent;
+  }
 
   numPostsUsedSoFar = 0;
 
@@ -682,7 +720,7 @@ static void createTextureCompositePatch(int id) {
   for (i=0; i<texture->patchcount; i++) {
     texpatch = &texture->patches[i];
     patchNum = texpatch->patch;
-    oldPatch = (const patch_t*)W_LumpByNum(patchNum);
+    oldPatch = rp_Header(W_LumpByNum(patchNum), W_LumpLength(patchNum));
 
     for (x=0; x<LittleShort(oldPatch->width); x++) {
       int top = -1;
@@ -718,7 +756,6 @@ static void createTextureCompositePatch(int id) {
           top = oldColumn->topdelta;
         }
 
-        oldColumnPixelData = (const byte *)oldColumn + 3;
         oy = texpatch->originy;
         count = oldColumn->length;
         // the original renderer had several bugs which we reproduce here
@@ -734,7 +771,7 @@ static void createTextureCompositePatch(int id) {
                 continue;
               if (ty >= composite_patch->height)
                 break;
-              StorePixel(composite_patch, tx, ty, oldColumnPixelData[y]);
+              StorePixel(composite_patch, tx, ty, rp_Pixel(oldColumn, y));
             }
           }
           // do the buggy clipping
@@ -779,10 +816,10 @@ static void createTextureCompositePatch(int id) {
             continue;
           if (ty >= composite_patch->height)
             break;
-          StorePixel(composite_patch, tx, ty, oldColumnPixelData[y]);
+          StorePixel(composite_patch, tx, ty, rp_Pixel(oldColumn, y));
         }
 
-        oldColumn = (const column_t *)((const byte *)oldColumn + oldColumn->length + 4);
+        oldColumn = rp_Next(oldColumn);
         countsInColumn[tx].posts_used++;
         assert(countsInColumn[tx].posts_used <= countsInColumn[tx].posts);
       }

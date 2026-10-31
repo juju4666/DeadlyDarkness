@@ -185,11 +185,11 @@ static void DimScreen(int level)
   if (level > 31)
     level = 31;
   {
-    const byte* map = (const byte*) colormaps[0] + level * 256;
+    const pixel_t* map = (const pixel_t*) colormaps[0] + level * BG_NUMCOLORS;
 
     for (y = 0; y < SCREENHEIGHT; ++y)
     {
-      byte* dest = screens[0].data + screens[0].pitch * y;
+      pixel_t* dest = screens[0].data + screens[0].pitch * y;
 
       for (x = 0; x < SCREENWIDTH; ++x)
         dest[x] = map[dest[x]];

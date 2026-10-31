@@ -214,6 +214,7 @@ set(COMMON_SRC
   dsda/begotten.c
   dsda/bgclass.c
   dsda/bgpalette.c
+  dsda/bgcolor.c
   dsda/bglight.c
   dsda/bgpickup.c
   dsda/bgscale.c

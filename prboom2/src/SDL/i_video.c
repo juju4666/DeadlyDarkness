@@ -118,7 +118,6 @@ extern const int gl_depthbuffer_bits;
 extern void M_QuitDOOM(int choice);
 int desired_fullscreen;
 int exclusive_fullscreen;
-SDL_Surface *screen;
 static SDL_Surface *buffer;
 SDL_Window *sdl_window;
 SDL_Renderer *sdl_renderer;
@@ -518,10 +517,14 @@ static void I_InitInputs(void)
 ///////////////////////////////////////////////////////////
 // Palette stuff.
 //
+// Display colour table: palette index -> pixel of the intermediate 32-bit buffer.  The software
+// renderer draws pixel_t palette indices (up to BG_NUMCOLORS colours) and this is the only place
+// where they become RGB.
+static Uint32 display_lut[BG_NUMCOLORS];
+
 static void I_UploadNewPalette(int pal, int force)
 {
-  // This is used to replace the current 256 colour cmap with a new one
-  // Used by 256 colour PseudoColor modes
+  // This is used to replace the current colour table with a new one
 
   static int cachedgamma;
   static size_t num_pals;
@@ -533,35 +536,36 @@ static void I_UploadNewPalette(int pal, int force)
   playpal_data = dsda_PlayPalData(playpal_index);
 
   if ((playpal_data->colours == NULL) || (cachedgamma != usegamma) || force) {
-    int pplump;
     int gtlump;
-    register const byte * palette;
     register const byte * gtable;
-    register int i;
+    size_t p, i;
 
-    pplump = W_GetNumForName(playpal_data->lump_name);
     gtlump = W_CheckNumForName2("GAMMATBL", ns_prboom);
-    palette = (const byte*) W_LumpByNum(pplump);
     gtable = (const byte*) W_LumpByNum(gtlump) + 256 * (cachedgamma = usegamma);
 
-    num_pals = W_LumpLength(pplump) / (3 * 256);
-    num_pals *= 256;
+    num_pals = (size_t) V_GetPlaypalCount();
 
-    if (!playpal_data->colours) {
-      // First call - allocate and prepare colour array
-      playpal_data->colours =
-        (SDL_Color*) Z_Malloc(sizeof(*playpal_data->colours) * num_pals);
+    if (playpal_data->colours) {
+      Z_Free(playpal_data->colours);
+      playpal_data->colours = NULL;
     }
+    playpal_data->colours =
+      (SDL_Color*) Z_Malloc(sizeof(*playpal_data->colours) * num_pals * BG_NUMCOLORS);
 
-    // set the colormap entries
-    for (i = 0; (size_t) i < num_pals; i++) {
-      playpal_data->colours[i].r = gtable[palette[0]];
-      playpal_data->colours[i].g = gtable[palette[1]];
-      playpal_data->colours[i].b = gtable[palette[2]];
-      palette += 3;
+    // set the colour entries of every sub-palette
+    for (p = 0; p < num_pals; p++) {
+      const byte * palette = V_GetColorPaletteFor((int) p);
+
+      for (i = 0; i < BG_NUMCOLORS; i++) {
+        SDL_Color* c = &playpal_data->colours[p * BG_NUMCOLORS + i];
+
+        c->r = gtable[palette[0]];
+        c->g = gtable[palette[1]];
+        c->b = gtable[palette[2]];
+        c->a = 255;
+        palette += 3;
+      }
     }
-
-    num_pals /= 256;
   }
 
 #ifdef RANGECHECK
@@ -570,7 +574,16 @@ static void I_UploadNewPalette(int pal, int force)
       pal, num_pals);
 #endif
 
-  SDL_SetPaletteColors(screen->format->palette, playpal_data->colours + 256 * pal, 0, 256);
+  if (buffer)
+  {
+    int i;
+
+    for (i = 0; i < BG_NUMCOLORS; i++) {
+      const SDL_Color* c = &playpal_data->colours[BG_NUMCOLORS * pal + i];
+
+      display_lut[i] = SDL_MapRGB(buffer->format, c->r, c->g, c->b);
+    }
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -624,29 +637,6 @@ void I_FinishUpdate (void)
     return;
   }
 
-  if (SDL_MUSTLOCK(screen)) {
-      int h;
-      byte *src;
-      byte *dest;
-
-      if (SDL_LockSurface(screen) < 0) {
-        lprintf(LO_INFO,"I_FinishUpdate: %s\n", SDL_GetError());
-        return;
-      }
-
-      dest=(byte*)screen->pixels;
-      src=screens[0].data;
-      h=screen->h;
-      for (; h>0; h--)
-      {
-        memcpy(dest,src,SCREENWIDTH); //e6y
-        dest+=screen->pitch;
-        src+=screens[0].pitch;
-      }
-
-      SDL_UnlockSurface(screen);
-  }
-
   /* Update the display buffer (flipping video pages if supported)
    * If we need to change palette, that implicitely does a flip */
   if (newpal != NO_PALETTE_CHANGE) {
@@ -654,9 +644,23 @@ void I_FinishUpdate (void)
     newpal = NO_PALETTE_CHANGE;
   }
 
-  // Blit from the paletted 8-bit screen buffer to the intermediate
-  // 32-bit RGBA buffer that we can load into the texture.
-  SDL_LowerBlit(screen, &src_rect, buffer, &src_rect);
+  // Convert the screen's palette indices to the intermediate 32-bit buffer that we can load
+  // into the texture.
+  {
+    int x, y;
+    const pixel_t* src = screens[0].data;
+    Uint8* dest = (Uint8*) buffer->pixels;
+
+    for (y = 0; y < SCREENHEIGHT; y++)
+    {
+      Uint32* d = (Uint32*) dest;
+
+      for (x = 0; x < SCREENWIDTH; x++)
+        d[x] = display_lut[src[x] & (BG_NUMCOLORS - 1)];
+      dest += buffer->pitch;
+      src += screens[0].pitch;
+    }
+  }
 
   // Update the intermediate texture with the contents of the RGBA buffer.
   SDL_UpdateTexture(sdl_texture, &src_rect, buffer->pixels, buffer->pitch);
@@ -689,7 +693,6 @@ void I_SetPalette (int pal)
 static void I_ShutdownSDL(void)
 {
   if (sdl_glcontext) SDL_GL_DeleteContext(sdl_glcontext);
-  if (screen) SDL_FreeSurface(screen);
   if (buffer) SDL_FreeSurface(buffer);
   if (sdl_texture) SDL_DestroyTexture(sdl_texture);
   if (sdl_renderer) SDL_DestroyRenderer(sdl_renderer);
@@ -1225,8 +1228,7 @@ void I_UpdateVideoMode(void)
     I_InitScreenResolution();
 
     if (sdl_glcontext) SDL_GL_DeleteContext(sdl_glcontext);
-    if (screen) SDL_FreeSurface(screen);
-    if (buffer) SDL_FreeSurface(buffer);
+      if (buffer) SDL_FreeSurface(buffer);
     if (sdl_texture) SDL_DestroyTexture(sdl_texture);
     if (sdl_renderer) SDL_DestroyRenderer(sdl_renderer);
     SDL_DestroyWindow(sdl_window);
@@ -1234,7 +1236,6 @@ void I_UpdateVideoMode(void)
     sdl_renderer = NULL;
     sdl_window = NULL;
     sdl_glcontext = NULL;
-    screen = NULL;
     buffer = NULL;
     sdl_texture = NULL;
   }
@@ -1321,13 +1322,12 @@ void I_UpdateVideoMode(void)
     // [FG] force integer scales
     SDL_RenderSetIntegerScale(sdl_renderer, integer_scaling);
 
-    screen = SDL_CreateRGBSurface(0, SCREENWIDTH, SCREENHEIGHT, 8, 0, 0, 0, 0);
     buffer = SDL_CreateRGBSurface(0, SCREENWIDTH, SCREENHEIGHT, 32, 0, 0, 0, 0);
     SDL_FillRect(buffer, NULL, 0);
 
     sdl_texture = SDL_CreateTextureFromSurface(sdl_renderer, buffer);
 
-    if(screen == NULL) {
+    if(buffer == NULL) {
       I_Error("Couldn't set %dx%d video mode [%s]", SCREENWIDTH, SCREENHEIGHT, SDL_GetError());
     }
   }
@@ -1369,19 +1369,10 @@ void I_UpdateVideoMode(void)
 
   if (V_IsSoftwareMode())
   {
-    lprintf(LO_DEBUG, "I_UpdateVideoMode: 0x%x, %s, %s\n", init_flags, screen && screen->pixels ? "SDL buffer" : "own buffer", screen && SDL_MUSTLOCK(screen) ? "lock-and-copy": "direct access");
+    lprintf(LO_DEBUG, "I_UpdateVideoMode: 0x%x, own %d-bit buffer\n", init_flags, (int) (8 * sizeof(pixel_t)));
 
-    // Get the info needed to render to the display
-    if (!SDL_MUSTLOCK(screen))
-    {
-      screens[0].not_on_heap = true;
-      screens[0].data = (unsigned char *) (screen->pixels);
-      screens[0].pitch = screen->pitch;
-    }
-    else
-    {
-      screens[0].not_on_heap = false;
-    }
+    // the software renderer draws into its own screen buffers (pixel_t palette indices)
+    screens[0].not_on_heap = false;
 
     V_AllocScreens();
 

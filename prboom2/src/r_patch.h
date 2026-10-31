@@ -58,7 +58,7 @@ typedef struct {
 typedef struct {
   int numPosts;
   rpost_t *posts;
-  unsigned char *pixels;
+  pixel_t *pixels;
 } rcolumn_t;
 
 typedef struct {
@@ -74,7 +74,7 @@ typedef struct {
   unsigned char *data;
 
   // these are pointers into the data array
-  unsigned char *pixels;
+  pixel_t *pixels;
   rcolumn_t *columns;
   rpost_t *posts;
 

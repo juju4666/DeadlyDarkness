@@ -24,15 +24,15 @@
 typedef struct
 {
   int lump, w, h;
-  byte* px;        // palette index per screen pixel
+  pixel_t* px;     // palette index per screen pixel
   byte* on;        // 1 where the picture is opaque
 } fit_t;
 
 static fit_t fits[FIT_MAX];
 static int num_fits;
-static byte fit_pal[768];
+static byte fit_pal[3 * BG_NUMCOLORS];
 static dboolean fit_pal_set;
-static byte* near6;               // palette index nearest to a colour of 6 bits per channel (0xff: not worked out yet)
+static pixel_t* near6;            // palette index nearest to a colour of 6 bits per channel (0xffff: not worked out yet)
 
 void bg_FitPatchFlush(void)
 {
@@ -45,19 +45,23 @@ void bg_FitPatchFlush(void)
   }
   num_fits = 0;
   if (near6)
-    memset(near6, 0xff, 1 << 18);
+    memset(near6, 0xff, (1 << 18) * sizeof(pixel_t));
 }
 
-// ordinary colours only (0..239): the glow ramps are for things that shine
+// ordinary colours only (index & 255 below 240): the glow ramps are for things that shine
 static int nearest(int r, int g, int b)
 {
   int i, best = 0;
   long bd = 1L << 30;
 
-  for (i = 0; i < 240; ++i)
+  for (i = 0; i < BG_NUMCOLORS; ++i)
   {
-    long dr = fit_pal[i * 3] - r, dg = fit_pal[i * 3 + 1] - g, db = fit_pal[i * 3 + 2] - b;
-    long d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+    long dr, dg, db, d;
+
+    if ((i & 255) >= 240)
+      continue;
+    dr = fit_pal[i * 3] - r; dg = fit_pal[i * 3 + 1] - g; db = fit_pal[i * 3 + 2] - b;
+    d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
 
     if (d < bd)
     {
@@ -74,23 +78,23 @@ static int nearest_cached(int r, int g, int b)
 
   if (!near6)
   {
-    near6 = malloc(1 << 18);
-    memset(near6, 0xff, 1 << 18);
+    near6 = malloc((1 << 18) * sizeof(pixel_t));
+    memset(near6, 0xff, (1 << 18) * sizeof(pixel_t));
   }
-  if (near6[k] == 0xff)
-    near6[k] = (byte) nearest((r & ~3) | 2, (g & ~3) | 2, (b & ~3) | 2);
+  if (near6[k] == 0xffff)
+    near6[k] = (pixel_t) nearest((r & ~3) | 2, (g & ~3) | 2, (b & ~3) | 2);
   return near6[k];
 }
 
 static void check_palette(void)
 {
-  const byte* pal = V_GetPlaypal();
+  const byte* pal = V_GetColorPalette();
 
   if (!pal)
     return;
-  if (!fit_pal_set || memcmp(fit_pal, pal, 768))
+  if (!fit_pal_set || memcmp(fit_pal, pal, sizeof fit_pal))
   {
-    memcpy(fit_pal, pal, 768);
+    memcpy(fit_pal, pal, sizeof fit_pal);
     fit_pal_set = true;
     bg_FitPatchFlush();
   }
@@ -98,7 +102,7 @@ static void check_palette(void)
 
 // Shrinks a picture of sw x sh palette indices (opaque where mask != 0) to dw x dh: exact area average of the colours,
 // then Floyd-Steinberg error diffusion to the palette. out_px/out_on are dw * dh.
-static void fit_shrink(const byte* src, const byte* mask, int sw, int sh, int dw, int dh, byte* out_px, byte* out_on)
+static void fit_shrink(const pixel_t* src, const byte* mask, int sw, int sh, int dw, int dh, pixel_t* out_px, byte* out_on)
 {
   float* tmp = malloc((size_t) dw * sh * 4 * sizeof(float));   // r, g, b, coverage
   float* img = malloc((size_t) dw * dh * 4 * sizeof(float));
@@ -193,7 +197,7 @@ static void fit_shrink(const byte* src, const byte* mask, int sw, int sh, int dw
       ig = (int) (c[1] + 0.5f);
       ib = (int) (c[2] + 0.5f);
       idx = nearest_cached(ir > 255 ? 255 : ir, ig > 255 ? 255 : ig, ib > 255 ? 255 : ib);
-      out_px[at] = (byte) idx;
+      out_px[at] = (pixel_t) idx;
       out_on[at] = 1;
       for (k = 0; k < 3; ++k)
       {
@@ -213,11 +217,11 @@ static void fit_shrink(const byte* src, const byte* mask, int sw, int sh, int dw
 }
 
 // the picture of a patch as one palette index and one opaque flag per pixel
-static void patch_pixels(const rpatch_t* p, byte** px, byte** mask)
+static void patch_pixels(const rpatch_t* p, pixel_t** px, byte** mask)
 {
   int x, y, i;
 
-  *px = calloc((size_t) p->width * p->height, 1);
+  *px = calloc((size_t) p->width * p->height, sizeof(pixel_t));
   *mask = calloc((size_t) p->width * p->height, 1);
   for (x = 0; x < p->width; ++x)
   {
@@ -242,7 +246,8 @@ static fit_t* get_fit(int lump, int dw, int dh)
   int i;
   fit_t* f;
   const rpatch_t* p;
-  byte *px, *mask;
+  pixel_t *px;
+  byte *mask;
 
   check_palette();
   for (i = 0; i < num_fits; ++i)
@@ -257,7 +262,7 @@ static fit_t* get_fit(int lump, int dw, int dh)
   f->lump = lump;
   f->w = dw;
   f->h = dh;
-  f->px = malloc((size_t) dw * dh);
+  f->px = malloc((size_t) dw * dh * sizeof(pixel_t));
   f->on = malloc((size_t) dw * dh);
   patch_pixels(p, &px, &mask);
   fit_shrink(px, mask, p->width, p->height, dw, dh, f->px, f->on);
@@ -289,7 +294,7 @@ dboolean bg_DrawFitPatch(int lump, int x, int y, int w, int h, int flags)
   for (iy = 0; iy < sh; ++iy)
   {
     int dy = sy + iy;
-    byte* row;
+    pixel_t* row;
 
     if (dy < 0 || dy >= SCREENHEIGHT)
       continue;
@@ -322,10 +327,14 @@ int bg_PaletteNearestFlat(int r, int g, int b)
   double bd = 1e30, lt = (r + g + b) / 3.0;
 
   check_palette();
-  for (i = 0; i < 255; ++i)
+  for (i = 0; i < BG_NUMCOLORS; ++i)
   {
-    double pr = fit_pal[i * 3], pg = fit_pal[i * 3 + 1], pb = fit_pal[i * 3 + 2], pl = (pr + pg + pb) / 3.0;
-    double d = 3 * (pr - r) * (pr - r) + 4 * (pg - g) * (pg - g) + 2 * (pb - b) * (pb - b);
+    double pr, pg, pb, pl, d;
+
+    if (i == 255)
+      continue;
+    pr = fit_pal[i * 3]; pg = fit_pal[i * 3 + 1]; pb = fit_pal[i * 3 + 2]; pl = (pr + pg + pb) / 3.0;
+    d = 3 * (pr - r) * (pr - r) + 4 * (pg - g) * (pg - g) + 2 * (pb - b) * (pb - b);
 
     d += 6.0 * (((pr - pl) - (r - lt)) * ((pr - pl) - (r - lt)) + ((pg - pl) - (g - lt)) * ((pg - pl) - (g - lt)) +
                 ((pb - pl) - (b - lt)) * ((pb - pl) - (b - lt)));
@@ -359,26 +368,33 @@ void bg_FillSlot(int x, int y, int w, int h, int flags, int colour)
   if (sw <= 0 || sh <= 0)
     return;
   for (iy = 0; iy < sh; ++iy)
-    memset(screens[0].data + (size_t) (sy + iy) * screens[0].pitch + sx, colour, (size_t) sw);
+  {
+    pixel_t* row = screens[0].data + (size_t) (sy + iy) * screens[0].pitch + sx;
+    int k;
+
+    for (k = 0; k < sw; ++k)
+      row[k] = (pixel_t) colour;
+  }
 }
 
 // ---- self test: a made-up palette and picture ----
 
 int bg_FitSelfTest(char* msg, size_t msglen)
 {
-  byte saved[768], px[16 * 16], mask[16 * 16], out[4 * 4], on[4 * 4];
+  byte saved[3 * BG_NUMCOLORS], mask[16 * 16], on[4 * 4];
+  pixel_t px[16 * 16], out[4 * 4];
   int i, fails = 0, x, y;
 
-  memcpy(saved, fit_pal, 768);
-  for (i = 0; i < 256; ++i)
-    fit_pal[i * 3] = fit_pal[i * 3 + 1] = fit_pal[i * 3 + 2] = (byte) i;   // a grey ramp
+  memcpy(saved, fit_pal, sizeof saved);
+  for (i = 0; i < BG_NUMCOLORS; ++i)
+    fit_pal[i * 3] = fit_pal[i * 3 + 1] = fit_pal[i * 3 + 2] = (byte) (i * 255 / (BG_NUMCOLORS - 1));   // a grey ramp
   if (near6)
-    memset(near6, 0xff, 1 << 18);
+    memset(near6, 0xff, (1 << 18) * sizeof(pixel_t));
   // left half black (index 0), right half white-ish (index 200), the top row transparent
   for (y = 0; y < 16; ++y)
     for (x = 0; x < 16; ++x)
     {
-      px[y * 16 + x] = x < 8 ? 0 : 200;
+      px[y * 16 + x] = x < 8 ? 0 : (BG_NUMCOLORS * 200 / 256);
       mask[y * 16 + x] = y >= 4;
     }
   fit_shrink(px, mask, 16, 16, 4, 4, out, on);
@@ -387,14 +403,14 @@ int bg_FitSelfTest(char* msg, size_t msglen)
     ++fails;
     snprintf(msg, msglen, "face shrink: transparency wrong");
   }
-  if (!fails && (out[4] > 20 || out[7] < 180))
+  if (!fails && (out[4] > 20 * BG_NUMCOLORS / 256 || out[7] < 180 * BG_NUMCOLORS / 256))
   {
     ++fails;
     snprintf(msg, msglen, "face shrink: halves %d %d", out[4], out[7]);
   }
-  memcpy(fit_pal, saved, 768);
+  memcpy(fit_pal, saved, sizeof saved);
   if (near6)
-    memset(near6, 0xff, 1 << 18);
+    memset(near6, 0xff, (1 << 18) * sizeof(pixel_t));
   if (!fails)
     snprintf(msg, msglen, "face shrink: ok");
   return fails;

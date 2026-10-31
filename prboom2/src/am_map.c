@@ -2224,7 +2224,7 @@ static void AM_ProcessNiceThing(mobj_t* mobj, angle_t angle, fixed_t x, fixed_t 
   {
     player_t *p = mobj->player;
     int color = mapcolor_p->plyr[p - players];
-    const unsigned char *playpal = V_GetPlaypal();
+    const unsigned char *playpal = V_GetColorPalette();
 
     if ((deathmatch && !demoplayback) && p != plr)
       return;
@@ -2969,7 +2969,7 @@ void AM_Drawer (dboolean minimap)
     if (bg_weapons && (back == 0 || back == 247))
       back = 255;
 
-    V_FillRect(FB, f_x, f_y, f_w, f_h, (byte)back); //jff 1/5/98 background default color
+    V_FillRect(FB, f_x, f_y, f_w, f_h, (pixel_t)back); //jff 1/5/98 background default color
   }
   if (automap_overlay == 2 && !M_MenuIsShaded())
     V_DrawShaded(FB, f_x, f_y, f_w, f_h, FULLSHADE);

@@ -55,7 +55,7 @@ static void R_DRAWCOLUMN_FUNCNAME(draw_column_vars_t *dcvars)
   int              count;
 
 #if (!(R_DRAWCOLUMN_PIPELINE & RDC_FUZZ))
-  byte             *dest;            // killough
+  pixel_t          *dest;            // killough
   fixed_t          frac;
   const fixed_t    fracstep = dcvars->iscale;
 #endif
@@ -148,14 +148,14 @@ static void R_DRAWCOLUMN_FUNCNAME(draw_column_vars_t *dcvars)
 // do nothing else when drawin fuzz columns
 #if (!(R_DRAWCOLUMN_PIPELINE & RDC_FUZZ))
   {
-    const byte          *source = dcvars->source;
+    const pixel_t       *source = dcvars->source;
 
 #if (!(R_DRAWCOLUMN_PIPELINE & RDC_NOCOLMAP))
     const lighttable_t  *colormap = dcvars->colormap;
 #endif
 
 #if (R_DRAWCOLUMN_PIPELINE & RDC_TRANSLATED)
-    const byte          *translation = dcvars->translation;
+    const pixel_t       *translation = dcvars->translation;
 #endif
 
     count++;

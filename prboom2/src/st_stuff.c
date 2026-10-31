@@ -445,13 +445,13 @@ static const unsigned char bg_font[10][5] = {
 
 #define BG_FLAGS (VPT_STRETCH | VPT_ALIGN_BOTTOM)
 
-static byte bg_Color(int r, int g, int b)
+static pixel_t bg_Color(int r, int g, int b)
 {
-  return (byte) V_BestColor(V_GetPlaypal(), r, g, b);
+  return (pixel_t) V_BestColor(V_GetColorPalette(), r, g, b);
 }
 
 // one digit of the pixel font; scale 1 = 3x5 pixels, 2 = 6x10
-static void bg_DrawDigit(int digit, int x, int y, int scale, byte color)
+static void bg_DrawDigit(int digit, int x, int y, int scale, pixel_t color)
 {
   int row, col;
 
@@ -461,7 +461,7 @@ static void bg_DrawDigit(int digit, int x, int y, int scale, byte color)
         V_FillRectVPT(FG, x + col * scale, y + row * scale, scale, scale, color, BG_FLAGS);
 }
 
-static int bg_DrawNumber(int value, int x, int y, byte color)
+static int bg_DrawNumber(int value, int x, int y, pixel_t color)
 {
   char text[8];
   int i;
@@ -496,13 +496,13 @@ static void ST_drawBegotten(void)
   };
   int i, r, c;
   int ay = ST_Y;
-  byte dark = bg_Color(24, 20, 20);
-  byte white = bg_Color(235, 235, 235);
-  byte gold = bg_Color(230, 190, 50);
-  byte grey = bg_Color(75, 75, 75);
-  byte red = bg_Color(220, 40, 40);
-  byte yellow = bg_Color(240, 220, 60);
-  byte green = bg_Color(60, 200, 60);
+  pixel_t dark = bg_Color(24, 20, 20);
+  pixel_t white = bg_Color(235, 235, 235);
+  pixel_t gold = bg_Color(230, 190, 50);
+  pixel_t grey = bg_Color(75, 75, 75);
+  pixel_t red = bg_Color(220, 40, 40);
+  pixel_t yellow = bg_Color(240, 220, 60);
+  pixel_t green = bg_Color(60, 200, 60);
   weapontype_t selected = bg_SelectedWeapon(plyr);
   int current_slot = bg_WeaponSlot(selected);
   int ammo_x = ST_X + 266;
@@ -518,7 +518,7 @@ static void ST_drawBegotten(void)
     int row = i % 4;
     int cx = ammo_x + 2 + col * 26;
     int cy = ay + 3 + row * 7;
-    byte color = white;
+    pixel_t color = white;
     int pct = plyr->maxammo[type] ? plyr->ammo[type] * 100 / plyr->maxammo[type] : 0;
 
     if (plyr->ammo[type] == 0) color = red;
@@ -545,7 +545,7 @@ static void ST_drawBegotten(void)
     int dy = ay + 3 + r2 * 14;
     weapontype_t w = bg_slot_primary[i];
     dboolean owned = w != wp_nochange && plyr->weaponowned[w];
-    byte color = i == current_slot ? white : (owned ? gold : grey);
+    pixel_t color = i == current_slot ? white : (owned ? gold : grey);
 
     if (i == current_slot)
       V_FillRectVPT(FG, dx - 2, dy - 2, 10, 13, bg_Color(150, 30, 30), BG_FLAGS);

@@ -44,6 +44,12 @@ typedef int dboolean;
 
 typedef unsigned char byte;
 
+// Begotten: a pixel of the screen, of a picture and of a colormap is an index into the palette. It is 16 bits wide so that
+// the palette can have more than 256 colours (see BG_NUMCOLORS).
+typedef unsigned short pixel_t;
+#define BG_COLORBITS 9
+#define BG_NUMCOLORS (1 << BG_COLORBITS)   // colours in a palette
+
 //e6y
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))

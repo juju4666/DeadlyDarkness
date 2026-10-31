@@ -161,7 +161,7 @@ const lighttable_t *(*zlight)[MAXLIGHTZ];
 const lighttable_t *fullcolormap;
 const lighttable_t **colormaps;
 
-const byte* colormap_lump;
+const pixel_t* colormap_lump;
 
 // killough 3/20/98, 4/4/98: end dynamic colormaps
 
@@ -482,7 +482,7 @@ static void R_InitLightTables (void)
               level = NUMCOLORMAPS-1;
 
           // killough 3/20/98: Initialize multiple colormaps
-          level *= 256;
+          level *= BG_NUMCOLORS;
           for (t=0; t<numcolormaps; t++)         // killough 4/4/98
             c_zlight[t][i][j] = colormaps[t] + level;
         }
@@ -751,7 +751,7 @@ void R_ExecuteSetViewSize (void)
         level = NUMCOLORMAPS-1;
 
       // killough 3/20/98: initialize multiple colormaps
-      level *= 256;
+      level *= BG_NUMCOLORS;
 
       for (t=0; t<numcolormaps; t++)     // killough 4/4/98
         c_scalelight[t][i][j] = colormaps[t] + level;
@@ -1030,7 +1030,7 @@ static void R_SetupFrame (player_t *player)
       static const lighttable_t *scalelightfixed[MAXLIGHTSCALE];
 
       fixedcolormap = fullcolormap   // killough 3/20/98: use fullcolormap
-        + player->fixedcolormap*256*sizeof(lighttable_t);
+        + player->fixedcolormap*BG_NUMCOLORS;
 
       walllights = scalelightfixed;
 

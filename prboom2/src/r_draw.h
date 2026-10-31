@@ -69,11 +69,11 @@ typedef struct draw_column_vars_s
   fixed_t             iscale;
   fixed_t             texturemid;
   int                 texheight;    // killough
-  const byte          *source; // first pixel in a column
-  const byte          *prevsource; // first pixel in previous column
-  const byte          *nextsource; // first pixel in next column
+  const pixel_t       *source; // first pixel in a column
+  const pixel_t       *prevsource; // first pixel in previous column
+  const pixel_t       *nextsource; // first pixel in next column
   const lighttable_t  *colormap;
-  const byte          *translation;
+  const pixel_t       *translation;
   int                 edgeslope; // OR'ed RDRAW_EDGESLOPE_*
   // 1 if R_DrawColumn* is currently drawing a masked column, otherwise 0
   int                 drawingmasked;
@@ -98,7 +98,7 @@ typedef struct {
   fixed_t             yfrac;
   fixed_t             xstep;
   fixed_t             ystep;
-  const byte          *source; // start of a square tile image: 64*64, or 128*128, 256*256 ... (see flatshift)
+  const pixel_t       *source; // start of a square tile image: 64*64, or 128*128, 256*256 ... (see flatshift)
   int                 flatshift; // log2 of the tile's side: 6 for 64*64
   const lighttable_t  *colormap;
 
@@ -113,14 +113,14 @@ typedef struct {
 } draw_span_vars_t;
 
 typedef struct {
-  byte           *topleft;
+  pixel_t        *topleft;
   int   pitch;
 } draw_vars_t;
 
 extern draw_vars_t drawvars;
 
 extern byte playernumtotrans[MAX_MAXPLAYERS]; // CPhipps - what translation table for what player
-extern byte       *translationtables;
+extern pixel_t    *translationtables;
 
 R_DrawColumn_f R_GetDrawColumnFunc(enum column_pipeline_e type, enum draw_filter_type_e filterz);
 
@@ -133,6 +133,7 @@ void R_InitBuffersRes(void);
 
 // Initialize color translation tables, for player rendering etc.
 void R_InitTranslationTables(void);
+void R_RebuildTranslationTables(void);
 
 // Rendering function.
 void R_FillBackScreen(void);

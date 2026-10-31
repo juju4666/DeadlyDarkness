@@ -663,10 +663,10 @@ static void R_DoDrawPlane(visplane_t *pl)
       int stop, light;
       draw_span_vars_t dsvars;
 
-      dsvars.source = W_LumpByNum(firstflat + flattranslation[pl->picnum]);
+      dsvars.source = R_GetFlatPixels(firstflat + flattranslation[pl->picnum]);
       // Begotten: a flat of 128x128 (256x256 ...) bytes covers the same 64x64 map units as a 64x64 one: more pixels,
       // same size. The picture's pixels per map unit multiply the texture scale.
-      dsvars.flatshift = R_FlatShift(W_LumpLength(firstflat + flattranslation[pl->picnum]));
+      dsvars.flatshift = R_FlatShift(R_FlatPixelCount(firstflat + flattranslation[pl->picnum]));
       dsvars.xoffs = pl->xoffs;
       dsvars.yoffs = pl->yoffs;
       dsvars.xscale = pl->xscale << (dsvars.flatshift - 6);
