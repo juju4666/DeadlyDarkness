@@ -878,3 +878,7 @@ The software renderer now draws with a palette of **512 colours** instead of 256
 - **UDB.** UDB shows the classic 256-colour palette; to preview wide art there, load the PNG folder as a resource.
 - **Limits.** OpenGL mode is not supported with 512 colours (software renderer only). The automap colour picker still offers 256 swatches. Not tested here: the Windows build, real hardware, and how it looks on your screen.
 - Developer aids: `BG_EXTRAS=hue` makes the in-between colours the vertical hue-row midpoint instead of the next shade.
+
+## 0.11.1
+
+- **Fix (Windows): lights, halos and translucency drew black.** The nearest-colour search of the 512-colour palette kept its best distance in a `long`; on Windows a `long` is 32 bits, so the start value overflowed and almost no colour was ever found (the search returned black). Everything that goes through it was affected: coloured and dynamic light pools on walls, halos and coronas, fog, translucency tables. It now uses 64-bit integers, and a selftest compares the search with a plain scan of the palette.

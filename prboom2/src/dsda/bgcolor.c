@@ -222,7 +222,7 @@ int bg_NNFind(const bg_nn_t* nn, int r, int g, int b)
 {
   unsigned cell, i, end;
   int best = 0;
-  long bd = 1L << 40;
+  long long bd = 1LL << 40;
 
   r = r < 0 ? 0 : r > 255 ? 255 : r;
   g = g < 0 ? 0 : g > 255 ? 255 : g;
@@ -232,8 +232,8 @@ int bg_NNFind(const bg_nn_t* nn, int r, int g, int b)
   for (i = nn->start[cell]; i < end; ++i)
   {
     int k = nn->pool[i];
-    long dr = nn->rgb[3 * k] - r, dg = nn->rgb[3 * k + 1] - g, db = nn->rgb[3 * k + 2] - b;
-    long d = dr * dr * nn->w[0] + dg * dg * nn->w[1] + db * db * nn->w[2];
+    long long dr = nn->rgb[3 * k] - r, dg = nn->rgb[3 * k + 1] - g, db = nn->rgb[3 * k + 2] - b;
+    long long d = dr * dr * nn->w[0] + dg * dg * nn->w[1] + db * db * nn->w[2];
 
     if (d < bd || (d == bd && k < best))
     {
@@ -392,9 +392,54 @@ int bg_SelfTest(char* msg, size_t msglen)
       ++fails;
     }
   }
+  // the nearest colour search against a plain scan (64-bit distances: a 32-bit long, as on Windows, broke it once)
+  if (!fails)
+  {
+    bg_nn_t* nn = bg_NNBuild(w, 3, 4, 2);
+    unsigned seed = 12345;
+    int n;
+
+    for (n = 0; n < 300 && !fails; ++n)
+    {
+      int rgb[3], k, best = -1;
+      long long bd = 0;
+
+      for (k = 0; k < 3; ++k)
+      {
+        seed = seed * 1664525u + 1013904223u;
+        rgb[k] = (int) (seed >> 24);
+      }
+      for (k = 0; k < BG_NUMCOLORS; ++k)
+      {
+        long long dr, dg, db, d;
+
+        if ((k & 255) == 255)
+          continue;
+        dr = w[3 * k] - rgb[0]; dg = w[3 * k + 1] - rgb[1]; db = w[3 * k + 2] - rgb[2];
+        d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (best < 0 || d < bd)
+        {
+          best = k;
+          bd = d;
+        }
+      }
+      k = bg_NNFind(nn, rgb[0], rgb[1], rgb[2]);
+      if (k != best)
+      {
+        long long dr = w[3 * k] - rgb[0], dg = w[3 * k + 1] - rgb[1], db = w[3 * k + 2] - rgb[2];
+
+        if (dr * dr * 3 + dg * dg * 4 + db * db * 2 != bd)
+        {
+          snprintf(msg, msglen, "nearest colour: %d,%d,%d gave %d, a scan gives %d", rgb[0], rgb[1], rgb[2], k, best);
+          ++fails;
+        }
+      }
+    }
+    bg_NNFree(nn);
+  }
   bg_PaletteChanged();
   if (!fails)
-    snprintf(msg, msglen, "wide palette: ok");
+    snprintf(msg, msglen, "wide palette and nearest colour: ok");
   return fails;
 #else
   snprintf(msg, msglen, "wide palette: 256 colours");
