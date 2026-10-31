@@ -351,6 +351,9 @@ typedef struct line_s
   int healthgroup;
   const pixel_t* tranmap;
   float alpha;
+
+  // Begotten: portal to another line (NULL: an ordinary line), see dsda/portal.h
+  struct bg_portal_s* portal;
 } line_t;
 
 #define LINE_ARG_COUNT 5

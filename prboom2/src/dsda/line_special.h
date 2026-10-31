@@ -136,7 +136,7 @@ typedef enum {
   zl_ceiling_crush_and_raise_silent_dist = 104,
   zl_door_wait_raise                     = 105,
   zl_door_wait_close                     = 106,
-//zl_line_set_portal_target              = 107,
+  zl_line_set_portal_target              = 107,
 
 //zl_light_force_lightning   = 109,
   zl_light_raise_by_value    = 110,
@@ -171,7 +171,7 @@ typedef enum {
 
   zl_teleport_no_stop = 154,
 
-//zl_line_set_portal             = 156,
+  zl_line_set_portal             = 156,
 //zl_set_global_fog_parameter    = 157,
 //zl_fs_execute                  = 158,
 //zl_sector_set_plane_reflection = 159,

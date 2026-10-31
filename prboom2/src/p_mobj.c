@@ -39,6 +39,7 @@
 #include "p_map.h"
 #include "dsda/bglight.h"
 #include "dsda/begotten.h"
+#include "dsda/portal.h"
 #include "dsda/bgroster.h"
 #include "dsda/bgclass.h"
 #include "p_tick.h"
@@ -328,8 +329,19 @@ static void P_XYMovement (mobj_t* mo)
 
     // killough 3/15/98: Allow objects to drop off
 
+    bg_last_crossing = NULL;
     if (P_TryMove (mo, ptryx, ptryy, true))
     {
+      // begotten: through a portal: the rest of this tic's movement goes on in the direction of the other end
+      if (bg_last_crossing)
+      {
+        fixed_t rx, ry;
+
+        bg_PortalMapVector(bg_last_crossing, xmove, ymove, &rx, &ry);
+        xmove = rx;
+        ymove = ry;
+        bg_last_crossing = NULL;
+      }
       // begotten: a missile that was parried during this step has a new heading; the rest of this
       // tic's movement must not carry on along the old one
       if (bg_weapons && mo->bg_redirected)

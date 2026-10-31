@@ -36,6 +36,7 @@
 #include "p_user.h"
 #include "p_spec.h"
 #include "dsda/begotten.h"
+#include "dsda/portal.h"
 #include "p_tick.h"
 #include "p_map.h"
 #include "r_fps.h"
@@ -337,6 +338,8 @@ void P_Ticker (void)
     dsda_BegottenSaveTest();
   if (getenv("BEGOTTEN_SELFTEST") && *getenv("BEGOTTEN_SELFTEST") == '9' && playeringame[0] && players[0].mo)
     dsda_BegottenCoopTest();
+  if (getenv("BEGOTTEN_SELFTEST") && *getenv("BEGOTTEN_SELFTEST") == 'P' && playeringame[0] && players[0].mo)
+    bg_PortalLiveTest();
   if (getenv("BEGOTTEN_SELFTEST") && *getenv("BEGOTTEN_SELFTEST") == 'S' && playeringame[0] && players[0].mo)
     dsda_BegottenSpectateTest();
   if (leveltime == 5 && getenv("BEGOTTEN_HEALTH") && playeringame[0] && players[0].mo)
@@ -383,6 +386,8 @@ void P_Ticker (void)
           P_PlayerThink(&players[i]);
 
     P_RunThinkers();
+    if (bg_numportals)
+      bg_PortalsUpdate();          // Begotten: portals on polyobjects turn and move with them
     P_UpdateSpecials();
     P_AnimateSurfaces();
     P_RespawnSpecials();

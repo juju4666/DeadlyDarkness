@@ -1088,6 +1088,9 @@ static dboolean CheckMobjBlocking(seg_t * seg, polyobj_t * po)
 
     ld = seg->linedef;
 
+    if (ld->portal)             // Begotten: a portal is not a wall, whatever walks into it comes out of the other end
+        return false;
+
     top = (ld->bbox[BOXTOP] - bmaporgy + MAXRADIUS) >> MAPBLOCKSHIFT;
     bottom = (ld->bbox[BOXBOTTOM] - bmaporgy - MAXRADIUS) >> MAPBLOCKSHIFT;
     left = (ld->bbox[BOXLEFT] - bmaporgx - MAXRADIUS) >> MAPBLOCKSHIFT;

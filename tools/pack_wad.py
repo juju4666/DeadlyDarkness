@@ -114,7 +114,7 @@ def decode_patch(b, pal):
     if len(b) < 8:
         return None
     w, h, lo, to = struct.unpack('<hhhh', b[:8])
-    if not (0 < w <= 2048 and 0 < h <= 254) or len(b) < 8 + 4 * w:
+    if not (0 < w <= 2048 and 0 < h <= 1024) or len(b) < 8 + 4 * w:
         return None
     cols = struct.unpack('<%di' % w, b[8:8 + 4 * w])
     img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
@@ -122,6 +122,7 @@ def decode_patch(b, pal):
     for x, o in enumerate(cols):
         if o < 8 + 4 * w or o >= len(b):
             return None
+        prev = -1      # tall pictures (DeePsea): a top not larger than the previous post's is relative to it
         while True:
             if o >= len(b):
                 return None
@@ -131,6 +132,9 @@ def decode_patch(b, pal):
             if o + 3 > len(b):
                 return None
             ln = b[o + 1]
+            if prev >= 0 and top <= prev:
+                top += prev
+            prev = top
             step = 2 + 2 * ln if wide else 4 + ln
             if o + step > len(b) or top + ln > h:
                 return None

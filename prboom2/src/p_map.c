@@ -60,6 +60,7 @@
 #include "dsda/map_format.h"
 #include "dsda/mapinfo.h"
 #include "dsda/line_special.h"
+#include "dsda/portal.h"
 
 #include "heretic/def.h"
 
@@ -544,6 +545,8 @@ static void CheckForDamageSpecial(line_t *line, mobj_t *mo)
 
 static void CheckForPushSpecial(line_t * line, int side, mobj_t * mobj);
 
+static const line_t* bg_arrival_line;   // Begotten: the line a thing comes out of, while that is being checked
+
 static // killough 3/26/98: make static
 dboolean PIT_CheckLine (line_t* ld)
 {
@@ -557,6 +560,11 @@ dboolean PIT_CheckLine (line_t* ld)
 
   if (P_BoxOnLineSide(tmbbox, ld) != -1)
     return true; // didn't hit it
+
+  // Begotten: a portal line is no wall; whoever crosses it is taken to the other end (P_TryMove).  The line a thing
+  // arrives at is no wall either (it may not be a portal itself)
+  if (ld->portal || ld == bg_arrival_line)
+    return true;
 
   // A line has been hit
 
@@ -1522,6 +1530,156 @@ void P_IterateZDoomSpecHit(mobj_t *thing, fixed_t oldx, fixed_t oldy)
     }
 }
 
+// Begotten: portals.  A move whose path crosses a portal line (from its front) ends at the other end of the portal.
+// The thing is turned with the portal: its angle and its momentum.  Returns true if the move went through a portal;
+// *result then says whether it worked.
+const bg_portal_t* bg_last_crossing;          // the portal the last move went through (P_XYMovement turns the rest of its move)
+
+// the thing, which is (or would be) at x,y behind the front of the portal's line, comes out of the other end
+static void P_ThroughPortal(mobj_t* thing, const bg_portal_t* p, fixed_t x, fixed_t y, dboolean* result)
+{
+  const line_t* best = p->src;
+  fixed_t nx, ny, nz, savez, vx, vy;
+  dboolean ok;
+
+  bg_PortalMapPoint(p, x, y, &nx, &ny);
+  savez = thing->z;
+  nz = savez + p->dz;
+  thing->z = nz;
+  bg_arrival_line = p->dst;
+  ok = P_CheckPosition(thing, nx, ny);
+  bg_arrival_line = NULL;
+  thing->z = savez;
+
+  if (ok && !(thing->flags & MF_NOCLIP))
+  {
+    if (tmceilingz - tmfloorz < thing->height)
+      ok = false;
+    else if (!(thing->flags & (MF_TELEPORT | MF_FLY)) && !(thing->flags2 & MF2_FLY) && tmfloorz - nz > 24 * FRACUNIT)
+      ok = false;
+  }
+  if (!ok)
+  {
+    if (!BlockingMobj || BlockingMobj->player || !thing->player)
+      map_format.check_impact(thing);
+    *result = false;
+    return;
+  }
+
+  P_UnsetThingPosition(thing);
+  thing->floorz = tmfloorz;
+  thing->ceilingz = tmceilingz;
+  thing->dropoffz = tmdropoffz;
+  thing->x = nx;
+  thing->y = ny;
+  if (nz < tmfloorz)
+    nz = tmfloorz;
+  thing->z = nz;
+  P_SetThingPosition(thing);
+
+  bg_PortalMapVector(p, thing->momx, thing->momy, &vx, &vy);
+  thing->momx = vx;
+  thing->momy = vy;
+  thing->angle += p->dangle;
+  // the interpolation of the picture goes on smoothly: the old position, seen from the new end
+  bg_PortalMapPoint(p, thing->PrevX, thing->PrevY, &vx, &vy);
+  thing->PrevX = vx;
+  thing->PrevY = vy;
+  thing->PrevZ += p->dz;
+  if (thing->player && thing->player->mo == thing)
+  {
+    player_t* pl = thing->player;
+
+    bg_PortalMapVector(p, pl->momx, pl->momy, &vx, &vy);
+    pl->momx = vx;
+    pl->momy = vy;
+    pl->viewz += p->dz;
+    pl->prev_viewz += p->dz;
+    pl->prev_viewangle += p->dangle;
+    R_SmoothPlaying_Reset(pl);
+  }
+  numspechit = 0;
+  felldown = false;
+  floatok = true;
+  bg_last_crossing = p;
+  if (getenv("BEGOTTEN_PORTALDEBUG"))
+    lprintf(LO_INFO, "portal: thing type %d through line %d to line %d: now at %d,%d,%d angle %u\n", (int) thing->type,
+            (int) (best - lines), (int) (p->dst - lines), nx >> 16, ny >> 16, nz >> 16, (unsigned) (thing->angle >> 24));
+  *result = true;
+}
+
+static dboolean P_TryMovePortal(mobj_t* thing, fixed_t x, fixed_t y, dboolean* result)
+{
+  const line_t* best = NULL;
+  fixed_t bestt = 0x7fffffff;
+  int i;
+
+  for (i = 0; i < bg_numportals; ++i)
+  {
+    fixed_t t = bg_PortalCross(bg_portal_lines[i], thing->x, thing->y, x, y);
+
+    if (t >= 0 && t < bestt)
+    {
+      best = bg_portal_lines[i];
+      bestt = t;
+    }
+  }
+  if (!best)
+    return false;
+  P_ThroughPortal(thing, best->portal, x, y, result);
+  return true;
+}
+
+// A portal line on a polyobject moves by itself: what it moves over comes out of the other end (the line as it was
+// before, p->old*, and as it is now)
+static const bg_portal_t* sweep_portal;
+
+static dboolean PIT_PortalSweep(mobj_t* thing)
+{
+  const line_t* l = sweep_portal->src;
+  const bg_portal_t* p = sweep_portal;
+  int64_t before, after, along, len2;
+  dboolean ok;
+
+  if (thing->flags & MF_NOCLIP && !thing->player)
+    return true;
+  before = (int64_t) (p->ox2 - p->ox1) * (thing->y - p->oy1) - (int64_t) (p->oy2 - p->oy1) * (thing->x - p->ox1);
+  after = (int64_t) l->dx * (thing->y - l->v1->y) - (int64_t) l->dy * (thing->x - l->v1->x);
+  if (getenv("BEGOTTEN_PORTALDEBUG") && thing->player)
+    lprintf(LO_INFO, "portal sweep: player %d,%d before %d after %d\n", thing->x >> 16, thing->y >> 16, before > 0 ? 1 : before < 0 ? -1 : 0, after > 0 ? 1 : after < 0 ? -1 : 0);
+  if (before >= 0 || after < 0)
+    return true;           // (front is the negative side) not from the front to behind
+  len2 = ((int64_t) l->dx >> 8) * (l->dx >> 8) + ((int64_t) l->dy >> 8) * (l->dy >> 8);
+  along = ((int64_t) (thing->x - l->v1->x) >> 8) * (l->dx >> 8) + ((int64_t) (thing->y - l->v1->y) >> 8) * (l->dy >> 8);
+  if (along < 0 || along > len2)
+    return true;
+  if (getenv("BEGOTTEN_PORTALDEBUG"))
+    lprintf(LO_INFO, "portal sweep: thing %d at %d,%d carried\n", thing->type, thing->x >> 16, thing->y >> 16);
+  P_ThroughPortal(thing, p, thing->x, thing->y, &ok);
+  if (getenv("BEGOTTEN_PORTALDEBUG"))
+    lprintf(LO_INFO, "portal sweep: now at %d,%d,%d ok=%d\n", thing->x >> 16, thing->y >> 16, thing->z >> 16, ok);
+  bg_last_crossing = NULL;
+  return true;
+}
+
+void P_PortalSweep(const bg_portal_t* p)
+{
+  const line_t* l = p->src;
+  int xl, xh, yl, yh, bx, by;
+
+  sweep_portal = p;
+  if (getenv("BEGOTTEN_PORTALDEBUG"))
+    lprintf(LO_INFO, "portal sweep line %d: %d,%d -> %d,%d\n", (int) (l - lines), p->ox1 >> 16, p->oy1 >> 16, l->v1->x >> 16, l->v1->y >> 16);
+  xl = P_GetSafeBlockX(l->bbox[BOXLEFT] - bmaporgx - MAXRADIUS);
+  xh = P_GetSafeBlockX(l->bbox[BOXRIGHT] - bmaporgx + MAXRADIUS);
+  yl = P_GetSafeBlockY(l->bbox[BOXBOTTOM] - bmaporgy - MAXRADIUS);
+  yh = P_GetSafeBlockY(l->bbox[BOXTOP] - bmaporgy + MAXRADIUS);
+  for (bx = xl; bx <= xh; bx++)
+    for (by = yl; by <= yh; by++)
+      P_BlockThingsIterator(bx, by, PIT_PortalSweep);
+}
+
+
 dboolean P_TryMove(mobj_t* thing,fixed_t x,fixed_t y,
                   dboolean dropoff) // killough 3/15/98: allow dropoff as option
 {
@@ -1537,6 +1695,14 @@ dboolean P_TryMove(mobj_t* thing,fixed_t x,fixed_t y,
   if (hexen) return Hexen_P_TryMove(thing, x, y);
 
   felldown = floatok = false;               // killough 11/98
+
+  if (bg_numportals)
+  {
+    dboolean through;
+
+    if (P_TryMovePortal(thing, x, y, &through))
+      return through;
+  }
 
   if (!P_CheckPosition(thing, x, y))
   {                           // Solid wall or thing
@@ -2229,6 +2395,34 @@ static fixed_t  bottomslope;
 
 
 //
+// Begotten: a shot (or an aim) that meets a portal line goes on from the other end.  The trace is restarted from where
+// the eye would be, seen from the other end (so every distance and slope stays what it was), and everything before the
+// portal line is ignored
+static const bg_portal_t* shot_portal;       // set by the traversals: the portal the trace crossed
+static fixed_t shot_frac;                    // ... and how far along the trace
+static const line_t* shot_exit;              // when going on: the line the trace comes out of
+static fixed_t shot_minfrac;                 // ... and what is before it on the trace
+
+static dboolean P_ShotPortal(intercept_t* in)    // true: the traversal has dealt with this intercept (and must return `stop`)
+{
+  if (in->isaline)
+  {
+    line_t* li = in->d.line;
+
+    if (li == shot_exit)
+      return false;
+    if (li->portal && P_PointOnLineSide(trace.x, trace.y, li) == 0)
+    {
+      shot_portal = li->portal;
+      shot_frac = in->frac;
+      return true;
+    }
+  }
+  return false;
+}
+
+#define BG_SHOT_PORTAL_DEPTH 4
+
 // PTR_AimTraverse
 // Sets linetaget and aimslope when a target is aimed at.
 //
@@ -2240,6 +2434,16 @@ dboolean PTR_AimTraverse (intercept_t* in)
   fixed_t thingtopslope;
   fixed_t thingbottomslope;
   fixed_t dist;
+
+  if (bg_numportals)
+  {
+    if (in->frac < shot_minfrac)
+      return true;
+    if (in->isaline && in->d.line == shot_exit)
+      return true;
+    if (P_ShotPortal(in))
+      return false;
+  }
 
   if (in->isaline)
   {
@@ -2358,6 +2562,16 @@ dboolean PTR_ShootTraverse (intercept_t* in)
   fixed_t dist;
   fixed_t thingtopslope;
   fixed_t thingbottomslope;
+
+  if (bg_numportals)
+  {
+    if (in->frac < shot_minfrac)
+      return true;
+    if (in->isaline && in->d.line == shot_exit)
+      return true;
+    if (P_ShotPortal(in))
+      return false;
+  }
 
   if (in->isaline)
   {
@@ -2605,7 +2819,32 @@ fixed_t P_AimLineAttack(mobj_t* t1,angle_t angle,fixed_t distance, uint64_t mask
   /* killough 8/2/98: prevent friends from aiming at friends */
   aim_flags_mask = mask;
 
-  P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_AimTraverse);
+  if (!bg_numportals)
+    P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_AimTraverse);
+  else
+  {
+    fixed_t sx = t1->x, sy = t1->y;
+    int depth;
+
+    shot_portal = NULL;
+    shot_exit = NULL;
+    shot_minfrac = 0;
+    for (depth = 0; ; ++depth)
+    {
+      P_PathTraverse(sx,sy,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_AimTraverse);
+      if (linetarget || !shot_portal || depth >= BG_SHOT_PORTAL_DEPTH)
+        break;
+      bg_PortalMapPoint(shot_portal, sx, sy, &sx, &sy);
+      bg_PortalMapPoint(shot_portal, x2, y2, &x2, &y2);
+      shootz += shot_portal->dz;
+      shot_exit = shot_portal->dst;
+      shot_minfrac = shot_frac;
+      shot_portal = NULL;
+    }
+    shot_portal = NULL;
+    shot_exit = NULL;
+    shot_minfrac = 0;
+  }
 
   if (linetarget)
     return aimslope;
@@ -2643,7 +2882,38 @@ void P_LineAttack(mobj_t* t1, angle_t angle, fixed_t distance, fixed_t slope,
   attackrange = distance;
   aimslope = slope;
 
-  if (P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse))
+  if (bg_numportals)
+  {
+    fixed_t sx = t1->x, sy = t1->y;
+    dboolean hit;
+    int depth;
+
+    shot_portal = NULL;
+    shot_exit = NULL;
+    shot_minfrac = 0;
+    for (depth = 0; ; ++depth)
+    {
+      hit = P_PathTraverse(sx,sy,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse);
+      if (getenv("BEGOTTEN_PORTALDEBUG"))
+        lprintf(LO_INFO, "shot depth %d from %d,%d to %d,%d: %s, portal %p frac %d\n", depth, sx >> 16, sy >> 16, x2 >> 16, y2 >> 16,
+                hit ? "missed" : "stopped", (const void*) shot_portal, shot_frac);
+      if (!shot_portal || depth >= BG_SHOT_PORTAL_DEPTH)
+        break;
+      bg_PortalMapPoint(shot_portal, sx, sy, &sx, &sy);
+      bg_PortalMapPoint(shot_portal, x2, y2, &x2, &y2);
+      shootz += shot_portal->dz;
+      shot_exit = shot_portal->dst;
+      shot_minfrac = shot_frac;
+      shot_portal = NULL;
+    }
+    shot_portal = NULL;
+    shot_exit = NULL;
+    shot_minfrac = 0;
+    if (!hit)
+      return;
+  }
+  else if (!P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse))
+    return;
   {
     if (hexen)
     {

@@ -70,6 +70,7 @@
 #include "dsda/configuration.h"
 #include "dsda/global.h"
 #include "dsda/id_list.h"
+#include "dsda/portal.h"
 #include "dsda/line_special.h"
 #include "dsda/map_format.h"
 #include "dsda/mapinfo.h"
@@ -3590,6 +3591,11 @@ void P_SpawnZDoomExtra(line_t *l, int i)
         sectors[*id_p].ceilinglightsec = sec;
       break;
 
+    // Begotten: portals
+    case zl_line_set_portal:
+      bg_PortalSpawn(l);
+      break;
+
     // [RH] ZDoom Static_Init settings
     case zl_static_init:
       switch (l->special_args[1])
@@ -3711,6 +3717,8 @@ static void Hexen_P_SpawnSpecials(void);
 // Parses command line parameters.
 void P_SpawnSpecials (void)
 {
+  bg_PortalsReset();
+
   if (hexen) return Hexen_P_SpawnSpecials();
 
   P_EvaluateDeathmatchParams();
@@ -6672,6 +6680,11 @@ dboolean P_ExecuteZDoomLineSpecial(int special, int * args, line_t * line, int s
 
         buttonSuccess = 1;
       }
+      break;
+    case zl_line_set_portal:
+    case zl_line_set_portal_target:
+      if (bg_PortalExecute(line, special, args))
+        buttonSuccess = 1;
       break;
     case zl_line_set_automap_style:
       if (args[1] >= 0 && args[1] <= ams_portal)

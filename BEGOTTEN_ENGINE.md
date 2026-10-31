@@ -902,3 +902,53 @@ No change to the game itself; the self tests were brought up to date and the 512
 
 - **Audit.** A memory-checked (AddressSanitizer) build was played through all 32 maps of `begotten.wad` as the witch, with every weapon fired in primary and secondary mode, plus maps 1 and 10 as the other two classes: no memory error other than one read of a lump name one byte past its end at start-up (in the original lump hash code, harmless). The 32-bit `long` of Windows was checked for every place the new colour code uses `long`: the only one that could overflow was the one fixed in 0.11.1.
 - **Self tests fixed.** The split-screen test still set the old saved player count (`bg_split_request` is what the menus set now), so three of its checks failed; the damage-multiplier tests assumed an old balance table (revenant firearm 80 / magic 130, a cacodemon entry) and a class-less player. They all pass now (`BEGOTTEN_SELFTEST=1`, `2`, `3`, and `8` / `9` with `BEGOTTEN_LOCALPLAYERS=2`). `BEGOTTEN_SELFTEST=4` (parry, thunderclap, blade, air control) needs a bigger test room than `MAP01` and fails the same way on 0.10.71, so it is not a result of the colour work.
+
+## 0.11.6 - witch hands re-encoded for the 512-colour palette
+
+- The first-person hand sprites (all W??? weapon frames, 70 lumps) were quantized to 256 colours long ago, which left
+  visible banding and blotches on the sleeves and skin. `tools/deband_hands.py <in.wad> <out.wad>` smooths the bands
+  (edge-preserving bilateral filter, edges and glow-range effect colours untouched) and dithers the result to the full
+  512-colour palette. The true-colour originals are not in the repository; if you have them, re-encode those instead
+  with pack_wad.py (it writes wide lumps automatically).
+- tools/pack_wad.py: decode_patch now reads tall pictures (over 254 rows, DeePsea convention) and accepts up to
+  1024 rows, so tall hand sprites (WSNP, WHLG, WPIS...) unpack and repack correctly.
+- Status faces were already dithered to 512 colours (0.11.2); no change.
+
+## 0.12.0 - portals and non-euclidean geometry
+
+A door can be a portal: a pair of linked lines. What is seen through one, and what walks, flies or is shot
+through it, comes out at the other line, in another part of the map (or the same one). The link can be changed
+while playing, so the same door leads somewhere else after a switch.
+
+### Making one (UDB, UDMF, zdoom namespace)
+- Give each of the two lines an id (the two may be any length; the same length is best, a warning is logged
+  otherwise). Both lines are one-sided and draw nothing themselves.
+- On the source line: **Line_SetPortal (156)**, args: target line id, this line id (0 = this line itself), type
+  (any value: all are treated the same), 0. The front of the source leads to the *back* of the target, as a door
+  does: walk into the source's front and come out of the target's front, facing away from it.
+- Rotation is free: a target at a quarter turn turns the view, the movement and the momentum with it. Height
+  differences between the two sectors are carried too. Mirroring is not supported.
+- A one-way link needs only the one special. For a two-way door put the special on both lines.
+- **Line_SetPortalTarget (107)**, args: this line id, new target line id (0 = unlink). Put it on a switch to
+  re-point a door.
+
+### What is carried
+Rendering (nested up to 4 deep, `BEGOTTEN_PORTALDEPTH` changes it), the player, monsters, items, projectiles,
+hitscan and autoaim, momentum and facing. Savegames store the links (SAVEVERSION 15; 14 still loads).
+
+### Moving portals
+A portal line on a polyobject (UDMF polyobject, `Polyobj_RotateLeft` etc.) keeps working while it moves: the other
+world is seen turning, and things that the line sweeps over are carried through it instead of being pushed or
+crushed. Keep the polyobject portal faces on the sides, not the end caps (end caps are ordinary walls).
+
+### Not done / limits
+- Monsters chase in plain map coordinates: they do not path through a portal on their own. Sight checks, reject
+  and sound do not pass through portals; monster missiles are not aimed through them.
+- The lantern, halos and weather are not drawn inside a portal view; lighting dims with the distance as seen.
+- No use-switches through a portal, no automap support, no OpenGL mode.
+- Untested here: Windows (MSVC) build and real-hardware appearance.
+
+### Developer aids
+`BEGOTTEN_SELFTEST=P` (live test on the test map), `BEGOTTEN_PORTALDEBUG`, `BEGOTTEN_PORTALSPIN` (turns polyobject
+1), `BEGOTTEN_TELEPORT="x y angle"`. `tools/make_portal_test_map.py OUT.wad [ZDBSP]` builds the test map
+(`POLY=1` adds the rotating two-faced panel).

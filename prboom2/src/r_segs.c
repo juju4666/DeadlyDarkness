@@ -575,6 +575,18 @@ static void R_RenderSegLoop (void)
       dcvars.iscale = FixedMul(0xffffffffu / (unsigned)rw_scale, bg_scale_textures);
     }
 
+    // Begotten: a portal: the rows of the window are not drawn (the view through it is, later), and nothing behind is seen
+    if (r_portalseg)
+    {
+      if (r_pwin_current >= 0)
+      {
+        r_pwtop[rw_x] = yl;
+        r_pwbot[rw_x] = yh;
+      }
+      ceilingclip[rw_x] = viewheight;
+      floorclip[rw_x] = -1;
+    }
+    else
     // draw the wall tiers
     if (midtexture)
     {
@@ -1046,7 +1058,15 @@ void R_StoreWallRange(const int start, const int stop)
   }
 
   didsolidcol = 0;
+  // Begotten: a portal line records the rows it covers instead of drawing a wall
+  r_pwin_current = -1;
+  if (r_portalseg)
+  {
+    r_pwin_current = R_NewPortalWindow(rw_x, rw_stopx - 1, linedef);
+    midtexture = 0;
+  }
   R_RenderSegLoop();
+  r_pwin_current = -1;
 
   /* cph - if a column was made solid by this wall, we _must_ save full clipping info */
   if (backsector && didsolidcol)

@@ -2639,7 +2639,7 @@ void G_DoLoadGame(void)
   save_p = savebuffer + SAVESTRINGSIZE;
 
   P_LOAD_X(saveversion);
-  if (saveversion != SAVEVERSION && !forced_loadgame) {
+  if (saveversion != SAVEVERSION && saveversion != 14 && !forced_loadgame) {
     G_LoadGameErr("Unrecognised savegame version!\nAre you sure? (y/n) ");
     return;
   }
@@ -2671,7 +2671,9 @@ void G_DoLoadGame(void)
   save_p += strlen((char*) save_p) + 1;
 
   // dearchive all the modifications
+  bg_saveversion = saveversion;
   dsda_UnArchiveAll();
+  bg_saveversion = SAVEVERSION;
 
   if (*save_p != 0xe6)
     I_Error ("G_DoLoadGame: Bad savegame");

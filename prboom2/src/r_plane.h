@@ -45,6 +45,7 @@ extern int *lastopening; // dropoff overflow
 
 // e6y: resolution limitation is removed
 extern int *floorclip, *ceilingclip; // dropoff overflow
+void R_ClearPlanesForPortal(void);
 extern fixed_t *yslope, *distscale;
 
 void R_InitVisplanesRes(void);

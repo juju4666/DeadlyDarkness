@@ -269,6 +269,19 @@ void R_ClearPlanes(void)
   memset (cachedheight, 0, SCREENHEIGHT * sizeof(*cachedheight));
 }
 
+// Begotten: the start of a view seen through a portal: the planes of the view before have been drawn (so they can be
+// recycled), but the openings of its drawsegs are still needed
+void R_ClearPlanesForPortal(void)
+{
+  int i;
+
+  for (i=0;i<MAXVISPLANES;i++)
+    for (*freehead = visplanes[i], visplanes[i] = NULL; *freehead; )
+      freehead = &(*freehead)->next;
+
+  memset (cachedheight, 0, SCREENHEIGHT * sizeof(*cachedheight));
+}
+
 // New function, by Lee Killough
 
 static visplane_t *new_visplane(unsigned hash)

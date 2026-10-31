@@ -50,6 +50,18 @@ extern unsigned maxdrawsegs;
 extern byte *solidcol;
 
 extern drawseg_t *ds_p;
+extern drawseg_t *ds_base;      // the first drawseg of the view being drawn (a view seen through a portal has its own)
+
+// Begotten: portals, see dsda/portal.h
+extern dboolean r_portalseg;                 // the line being added is a portal: R_StoreWallRange makes a window of it
+extern int *r_pwtop, *r_pwbot;               // where the wall loop writes the rows of the window (indexed by column)
+extern int r_pwin_current;                   // the window it is filling, or -1
+extern const line_t *r_exitline;             // seen through a portal: the line the view comes out of (NULL: the main view)
+extern dboolean r_passclip;                  // seen through a portal: sprites must stay inside the window
+extern int *r_passceil, *r_passfloor;
+int R_NewPortalWindow(int x1, int x2, line_t* line);
+void R_RenderPortals(void);                  // after the planes of the main view: the views through the windows
+dboolean R_BehindExit(fixed_t x, fixed_t y); // seen through a portal: is this point behind the line the view comes out of?
 
 void R_ClearClipSegs(void);
 void R_ClearDrawSegs(void);

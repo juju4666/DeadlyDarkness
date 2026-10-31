@@ -31,6 +31,7 @@
  *
  *-----------------------------------------------------------------------------*/
 
+#include <stdlib.h>
 #include "doomstat.h"
 #include "m_bbox.h"
 #include "p_spec.h"
@@ -41,6 +42,7 @@
 #include "r_bsp.h" // cph - sanity checking
 #include "v_video.h"
 #include "lprintf.h"
+#include "dsda/portal.h"
 
 // Turned off because it causes regressions on some maps (issue #256).  Fixing
 // this requires doing bleed with subsector granularity.
@@ -66,6 +68,14 @@ sector_t  *backsector;
 sector_t  *poly_frontsector;
 dboolean   poly_add_line;
 drawseg_t *ds_p;
+drawseg_t *ds_base;
+
+dboolean r_portalseg;
+int *r_pwtop, *r_pwbot;
+int r_pwin_current = -1;
+const line_t *r_exitline;
+dboolean r_passclip;
+int *r_passceil, *r_passfloor;
 
 // killough 4/7/98: indicates doors closed wrt automap bugfix:
 // cph - replaced by linedef rendering flags - int      doorclosed;
@@ -82,6 +92,7 @@ unsigned  maxdrawsegs;
 void R_ClearDrawSegs(void)
 {
   ds_p = drawsegs;
+  ds_base = drawsegs;
 }
 
 // CPhipps -
@@ -470,6 +481,10 @@ static void R_AddLine (seg_t *line)
   if (span >= ANG180)
     return;
 
+  // Begotten: seen through a portal, what lies behind the line the view comes out of is not part of the picture
+  if (r_exitline && R_BehindExit(line->v1->px, line->v1->py) && R_BehindExit(line->v2->px, line->v2->py))
+    return;
+
   // Global angle needed by segcalc.
   rw_angle1 = angle1;
   angle1 -= viewangle;
@@ -511,6 +526,17 @@ static void R_AddLine (seg_t *line)
   // Does not cross a pixel?
   if (x1 >= x2)       // killough 1/31/98 -- change == to >= for robustness
     return;
+
+  // Begotten: a portal line is a hole in the wall: it is solid (nothing behind it in this view) but draws nothing; the
+  // view through it is drawn later, into the rows R_StoreWallRange leaves in a window
+  if (bg_numportals && (linedef = curline->linedef) && linedef->portal && curline->sidedef == &sides[linedef->sidenum[0]])
+  {
+    backsector = NULL;
+    r_portalseg = true;
+    R_ClipWallSegment (x1, x2, true);
+    r_portalseg = false;
+    return;
+  }
 
   backsector = line->backsector;
 
@@ -916,4 +942,199 @@ void R_ForceRenderPolyObjs(void)
       R_AddPolyLines(&polyobjs[i]);
 
   ignore_gl_range_clipping = false;
+}
+
+//
+// Begotten: portals
+//
+// A portal line is a one-sided wall that draws nothing; R_StoreWallRange records, per column, which rows of the screen
+// it covers (a "window") and closes them.  After the whole of the main view (walls, planes) is done, each window is
+// drawn again from a camera moved to the far end of the portal and clipped to the window's rows.  Windows seen in that
+// view (the far side has portals too) are drawn the same way, a few levels deep.
+//
+
+#define R_PORTAL_MAXDEPTH_DEFAULT 4
+
+typedef struct
+{
+  int x1, x2;
+  line_t* line;
+  size_t off;               // into pwin_pool: (x2-x1+1) tops, then as many bottoms
+} r_pwin_t;
+
+static r_pwin_t* pwins;
+static int npwins, maxpwins;
+static int* pwin_pool;
+static size_t pwin_pool_n, pwin_pool_max;
+static int r_portal_depth;      // how many portals deep the view being drawn is
+static int r_portal_maxdepth = -1;
+static int pass_alloc;
+
+int R_NewPortalWindow(int x1, int x2, line_t* line)
+{
+  size_t need = (size_t) (x2 - x1 + 1) * 2;
+  r_pwin_t* w;
+
+  if (r_portal_maxdepth < 0)
+  {
+    const char* e = getenv("BEGOTTEN_PORTALDEPTH");
+
+    r_portal_maxdepth = e && *e ? atoi(e) : R_PORTAL_MAXDEPTH_DEFAULT;
+    if (r_portal_maxdepth < 0) r_portal_maxdepth = 0;
+  }
+  if (r_portal_depth >= r_portal_maxdepth)
+    return -1;
+  if (npwins >= maxpwins)
+  {
+    maxpwins = maxpwins ? maxpwins * 2 : 64;
+    pwins = Z_Realloc(pwins, maxpwins * sizeof(*pwins));
+  }
+  if (pwin_pool_n + need > pwin_pool_max)
+  {
+    while (pwin_pool_n + need > pwin_pool_max)
+      pwin_pool_max = pwin_pool_max ? pwin_pool_max * 2 : 16384;
+    pwin_pool = Z_Realloc(pwin_pool, pwin_pool_max * sizeof(*pwin_pool));
+  }
+  w = &pwins[npwins];
+  w->x1 = x1;
+  w->x2 = x2;
+  w->line = line;
+  w->off = pwin_pool_n;
+  pwin_pool_n += need;
+  r_pwtop = pwin_pool + w->off - x1;
+  r_pwbot = pwin_pool + w->off + (x2 - x1 + 1) - x1;
+  return npwins++;
+}
+
+// is a point on the wrong side of the line a view through a portal comes out of? (the eye is behind it)
+dboolean R_BehindExit(fixed_t x, fixed_t y)
+{
+  const line_t* l = r_exitline;
+  int64_t cross;
+
+  if (!l)
+    return false;
+  // the front of a line is on its right: cross(d, p - v1) < 0; behind, or on it, is cross >= 0
+  cross = (int64_t) l->dx * (y - l->v1->y) - (int64_t) l->dy * (x - l->v1->x);
+  return cross >= 0;
+}
+
+// the clipping of the view being drawn, for sprites: nothing outside the rows of the window
+static void R_PassClipFromWindow(const r_pwin_t* w)
+{
+  int x, n = w->x2 - w->x1 + 1;
+  const int* top = pwin_pool + w->off;
+  const int* bot = top + n;
+
+  for (x = 0; x < viewwidth; ++x)
+  {
+    r_passceil[x] = viewheight;
+    r_passfloor[x] = -1;
+  }
+  for (x = 0; x < n; ++x)
+    if (top[x] <= bot[x])
+    {
+      r_passceil[w->x1 + x] = top[x] - 1;
+      r_passfloor[w->x1 + x] = bot[x] + 1;
+    }
+}
+
+static void R_RenderPortalWindow(int wi)
+{
+  r_pwin_t w = pwins[wi];
+  const bg_portal_t* pt = w.line->portal;
+  r_camera_t cam;
+  int x, n = w.x2 - w.x1 + 1, first_window = npwins;
+  size_t pool_mark = pwin_pool_n;
+  drawseg_t* saved_base = ds_base;
+  drawseg_t* pass_start = ds_p;
+  int* open_start = lastopening;
+  int vs_start = R_VisSpriteMark();
+  const line_t* saved_exit = r_exitline;
+  dboolean saved_clip = r_passclip;
+  int vs_end;
+  drawseg_t* ds_end;
+  int* open_end;
+
+  if (!pt)
+    return;
+  R_SaveCamera(&cam);
+  R_PortalCamera(pt);
+  r_exitline = pt->dst;
+  r_passclip = true;
+  ++r_portal_depth;
+
+  R_PassClipFromWindow(&w);
+  for (x = 0; x < viewwidth; ++x)
+  {
+    solidcol[x] = 1;
+    floorclip[x] = r_passfloor[x];
+    ceilingclip[x] = r_passceil[x];
+  }
+  for (x = 0; x < n; ++x)
+  {
+    const int* top = pwin_pool + w.off;
+
+    if (top[x] <= top[n + x])
+      solidcol[w.x1 + x] = 0;
+  }
+  R_ClearPlanesForPortal();
+  ds_base = ds_p;
+  validcount++;
+  R_RenderBSPNode(numnodes - 1);
+  R_DrawPlanes();
+  R_ResetColumnBuffer();
+  ds_end = ds_p;
+  open_end = lastopening;
+  vs_end = R_VisSpriteMark();
+  if (getenv("BEGOTTEN_PORTALDEBUG"))
+    lprintf(LO_INFO, "portal pass depth %d window %d..%d line %d: camera %d,%d,%d angle %u: %d segs, %d sprites\n", r_portal_depth,
+            w.x1, w.x2, (int) (w.line - lines), viewx >> 16, viewy >> 16, viewz >> 16, (unsigned) viewangle >> 20,
+            (int) (ds_end - pass_start), vs_end - vs_start);
+
+  // windows of this view (nested portals)
+  {
+    int last = npwins, i;
+
+    for (i = first_window; i < last; ++i)
+      R_RenderPortalWindow(i);
+  }
+  npwins = first_window;
+  pwin_pool_n = pool_mark;
+  ds_p = ds_end;
+  lastopening = open_end;
+  R_VisSpriteRelease(vs_end);
+  R_PassClipFromWindow(&w);
+  r_exitline = pt->dst;
+  r_passclip = true;
+  R_DrawMaskedRange(ds_base, vs_start, false);
+  R_ResetColumnBuffer();
+
+  // done: this view's drawsegs, sprites and openings are no longer needed
+  ds_p = pass_start;
+  ds_base = saved_base;
+  lastopening = open_start;
+  R_VisSpriteRelease(vs_start);
+  --r_portal_depth;
+  r_exitline = saved_exit;
+  r_passclip = saved_clip;
+  R_RestoreCamera(&cam);
+}
+
+void R_RenderPortals(void)
+{
+  int i, n = npwins;
+
+  if (!r_passceil || pass_alloc < SCREENWIDTH)
+  {
+    Z_Free(r_passceil);
+    Z_Free(r_passfloor);
+    r_passceil = Z_Malloc(SCREENWIDTH * sizeof(int) * 2);
+    r_passfloor = r_passceil + SCREENWIDTH;
+    pass_alloc = SCREENWIDTH;
+  }
+  for (i = 0; i < n; ++i)
+    R_RenderPortalWindow(i);
+  npwins = 0;
+  pwin_pool_n = 0;
 }

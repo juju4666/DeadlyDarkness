@@ -63,6 +63,7 @@
 #include "dsda/bgnet.h"
 #include "dsda/bglight.h"
 #include "dsda/bgcolor.h"
+#include "dsda/portal.h"
 #include "dsda/bgvoxel.h"
 #include "dsda/bgprogress.h"
 #include "dsda/bgsplit.h"
@@ -4580,6 +4581,12 @@ void dsda_BegottenLiveTest(void)
 
         snprintf(w, sizeof w, "colour: %s", cm);
         CHECK(cf == 0, w);
+      }
+      {
+        int pf = 0;
+
+        bg_PortalSelfTest(&pf);
+        CHECK(pf == 0, "portals: the maths of a pair of lines");
       }
       // shadows: rays against made-up geometry (pillar, step, closed door, low ceiling), then a real bake
       {

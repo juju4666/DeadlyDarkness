@@ -39,6 +39,7 @@
 #include "p_spec.h"
 #include "p_tick.h"
 #include "p_saveg.h"
+#include "dsda/portal.h"
 #include "m_random.h"
 #include "am_map.h"
 #include "p_enemy.h"
@@ -159,6 +160,8 @@ void P_UnArchivePlayers (void)
 }
 
 
+int bg_saveversion = SAVEVERSION;
+
 //
 // P_ArchiveWorld
 //
@@ -248,6 +251,14 @@ void P_ArchiveWorld (void)
   }
 
   P_SAVE_X(musinfo.current_item);
+
+  // Begotten: where each line's portal leads (-1: it is none)
+  for (i = 0, li = lines; i < numlines; i++, li++)
+  {
+    int dst = li->portal ? (int) (li->portal->dst - lines) : -1;
+
+    P_SAVE_X(dst);
+  }
 }
 
 
@@ -350,6 +361,19 @@ void P_UnArchiveWorld (void)
   }
 
   P_LOAD_X(musinfo.current_item);
+
+  // Begotten: portals (saves of version 14 have none: the ones the map made at its start stay)
+  if (bg_saveversion >= 15)
+    for (i = 0, li = lines; i < numlines; i++, li++)
+    {
+      int dst;
+
+      P_LOAD_X(dst);
+      if (dst >= 0 && dst < numlines)
+        bg_PortalLink(li, &lines[dst]);
+      else if (li->portal)
+        bg_PortalLink(li, NULL);
+    }
 }
 
 //

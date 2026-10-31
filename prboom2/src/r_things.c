@@ -722,6 +722,9 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
     fz = thing->z;
   }
 
+  if (r_exitline && R_BehindExit(fx, fy))   // Begotten: seen through a portal, behind the line the view comes out of
+    return;
+
   if (bg_weapons) bg_ViewShift(thing, viewx, viewy, &fx, &fy);
   tr_x = fx - viewx;
   tr_y = fy - viewy;
@@ -1492,11 +1495,25 @@ static void msort(vissprite_t **s, vissprite_t **t, int n)
     }
 }
 
+// Begotten: the vissprites below vs_base belong to a view drawn before (the one the portal is seen from)
+static int vs_base;
+
+int R_VisSpriteMark(void)
+{
+  return num_vissprite;
+}
+
+void R_VisSpriteRelease(int mark)
+{
+  num_vissprite = mark;
+}
+
 void R_SortVisSprites (void)
 {
-  if (num_vissprite)
+  if (num_vissprite > vs_base)
     {
-      int i = num_vissprite;
+      const int count = num_vissprite - vs_base;
+      int i = count;
 
       // If we need to allocate more pointers for the vissprites,
       // allocate as many as were allocated for sprites -- killough
@@ -1510,12 +1527,12 @@ void R_SortVisSprites (void)
         }
 
       while (--i>=0)
-        vissprite_ptrs[num_vissprite-i-1] = vissprites+i;
+        vissprite_ptrs[count-i-1] = vissprites+vs_base+i;
 
       // killough 9/22/98: replace qsort with merge sort, since the keys
       // are roughly in order to begin with, due to BSP rendering.
 
-      msort(vissprite_ptrs, vissprite_ptrs + num_vissprite, num_vissprite);
+      msort(vissprite_ptrs, vissprite_ptrs + count, count);
     }
 }
 
@@ -1652,6 +1669,14 @@ static void R_DrawSprite (vissprite_t* spr)
     if (cliptop[x] == -2)
       cliptop[x] = -1;
 
+  // Begotten: seen through a portal, nothing outside the window
+  if (r_passclip)
+    for (x = spr->x1 ; x<=spr->x2 ; x++)
+    {
+      if (cliptop[x] < r_passceil[x]) cliptop[x] = r_passceil[x];
+      if (clipbot[x] > r_passfloor[x]) clipbot[x] = r_passfloor[x];
+    }
+
   mfloorclip = clipbot;
   mceilingclip = cliptop;
   if (spr->bg_voxel)
@@ -1725,12 +1750,23 @@ static void bg_ProjectHalos(void)
 
 void R_DrawMasked(void)
 {
+  R_DrawMaskedRange(drawsegs, 0, true);
+}
+
+// Begotten: the sprites and masked walls of one view: the drawsegs from dsbase on and the vissprites from vsbase on.
+// The main view also has the halos and the player's weapon; a view through a portal has neither.
+void R_DrawMaskedRange(drawseg_t* dsbase, int vsbase, dboolean main_view)
+{
   int i;
   drawseg_t *ds;
   int cx = SCREENWIDTH / 2;
+  int count;
 
-  bg_ProjectHalos();
+  if (main_view)
+    bg_ProjectHalos();
+  vs_base = vsbase;
   R_SortVisSprites();
+  count = num_vissprite - vsbase;
 
   // e6y
   // Reducing of cache misses in the following R_DrawSprite()
@@ -1739,7 +1775,7 @@ void R_DrawMasked(void)
   for(i = 0; i < DS_RANGES_COUNT; i++)
     drawsegs_xranges[i].count = 0;
 
-  if (num_vissprite > 0)
+  if (count > 0)
   {
     if (drawsegs_xrange_size < maxdrawsegs)
     {
@@ -1751,7 +1787,7 @@ void R_DrawMasked(void)
           drawsegs_xrange_size * sizeof(drawsegs_xranges[i].items[0]));
       }
     }
-    for (ds = ds_p; ds-- > drawsegs;)
+    for (ds = ds_p; ds-- > dsbase;)
     {
       if (ds->silhouette || ds->maskedtexturecol)
       {
@@ -1780,9 +1816,10 @@ void R_DrawMasked(void)
 
   // draw all vissprites back to front
 
-  dsda_RecordVisSprites(num_vissprite);
+  if (main_view)
+    dsda_RecordVisSprites(num_vissprite);
 
-  for (i = num_vissprite ;--i>=0; )
+  for (i = count ;--i>=0; )
   {
     vissprite_t* spr = vissprite_ptrs[i];
 
@@ -1813,10 +1850,12 @@ void R_DrawMasked(void)
 
   //    for (ds=ds_p-1 ; ds >= drawsegs ; ds--)    old buggy code
 
-  for (ds=ds_p ; ds-- > drawsegs ; )  // new -- killough
+  for (ds=ds_p ; ds-- > dsbase ; )  // new -- killough
     if (ds->maskedtexturecol)
       R_RenderMaskedSegRange(ds, ds->x1, ds->x2);
 
+  vs_base = 0;
   // draw the psprites on top of everything
-  R_DrawPlayerSprites ();
+  if (main_view)
+    R_DrawPlayerSprites ();
 }

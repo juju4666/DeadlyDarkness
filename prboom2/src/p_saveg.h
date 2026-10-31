@@ -36,7 +36,8 @@
 
 #include "doomtype.h"
 
-#define SAVEVERSION 14
+#define SAVEVERSION 15       // 15: Begotten portals (the link of every line); 14 can still be loaded
+extern int bg_saveversion;   // the version of the save being loaded (SAVEVERSION at any other time)
 
 /* Persistent storage/archiving.
  * These are the load / save game routines. */

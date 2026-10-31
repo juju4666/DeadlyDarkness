@@ -41,6 +41,7 @@
 #include "doomstat.h"
 #include "d_net.h"
 #include "w_wad.h"
+#include "dsda/portal.h"
 #include "r_main.h"
 #include "dsda/bglight.h"
 #include "dsda/bgvoxel.h"
@@ -1048,6 +1049,35 @@ static void R_SetupFrame (player_t *player)
   validcount++;
 }
 
+void R_SaveCamera(r_camera_t* cam)
+{
+  cam->x = viewx; cam->y = viewy; cam->z = viewz; cam->angle = viewangle;
+  cam->sin = viewsin; cam->cos = viewcos; cam->tansin = viewtansin; cam->tancos = viewtancos;
+}
+
+void R_RestoreCamera(const r_camera_t* cam)
+{
+  viewx = cam->x; viewy = cam->y; viewz = cam->z; viewangle = cam->angle;
+  viewsin = cam->sin; viewcos = cam->cos; viewtansin = cam->tansin; viewtancos = cam->tancos;
+}
+
+// Begotten: the view through a portal is the view of the same eye, moved to the other end
+void R_PortalCamera(const struct bg_portal_s* portal)
+{
+  int FocalTangent = finetangent[FINEANGLES/4 + FieldOfView/2];
+  fixed_t nx, ny;
+
+  bg_PortalMapPoint(portal, viewx, viewy, &nx, &ny);
+  viewx = nx;
+  viewy = ny;
+  viewz += portal->dz;
+  viewangle += portal->dangle;
+  viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
+  viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];
+  viewtansin = FixedMul(FocalTangent, viewsin);
+  viewtancos = FixedMul(FocalTangent, viewcos);
+}
+
 static void R_InitDrawScene(void)
 {
   // Framerate-independent fuzz progression
@@ -1155,6 +1185,13 @@ void R_RenderPlayerView (player_t* player)
   DSDA_ADD_CONTEXT(sf_reset_column_buffer);
   R_ResetColumnBuffer();
   DSDA_REMOVE_CONTEXT(sf_reset_column_buffer);
+
+  // Begotten: what is seen through portals goes into the holes the portal lines left
+  if (V_IsSoftwareMode() && bg_numportals)
+  {
+    R_RenderPortals();
+    R_ResetColumnBuffer();
+  }
 
   FakeNetUpdate();
 

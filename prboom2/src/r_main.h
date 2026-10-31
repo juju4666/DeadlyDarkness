@@ -44,6 +44,16 @@ extern int r_frame_count;
 //
 
 extern fixed_t  viewcos;
+struct bg_portal_s;
+typedef struct
+{
+  fixed_t x, y, z;
+  angle_t angle;
+  fixed_t sin, cos, tansin, tancos;
+} r_camera_t;
+void R_SaveCamera(r_camera_t* cam);
+void R_RestoreCamera(const r_camera_t* cam);
+void R_PortalCamera(const struct bg_portal_s* portal);   // the camera as seen from the far end of a portal
 extern fixed_t  viewsin;
 extern fixed_t  viewtancos;
 extern fixed_t  viewtansin;
