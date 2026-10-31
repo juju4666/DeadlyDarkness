@@ -2232,6 +2232,70 @@ weapontype_t bg_SlotSelectable(const player_t* player, int slot)
 }
 
 //
+// Status face: when the grit face shows (see begotten.h)
+//
+static int bg_hit_tic[MAX_MAXPLAYERS], bg_shot_tic[MAX_MAXPLAYERS], bg_shot_count[MAX_MAXPLAYERS];
+
+#define BG_GRIT_HIT_TICS 14
+#define BG_GRIT_SHOT_WINDOW 90   // a shot this soon after the last one belongs to the same hold
+
+void bg_NoteShot(const player_t* player)
+{
+  int n = (int) (player - players);
+
+  if (n < 0 || n >= MAX_MAXPLAYERS)
+    return;
+  if (leveltime - bg_shot_tic[n] > BG_GRIT_SHOT_WINDOW || leveltime < bg_shot_tic[n])
+    bg_shot_count[n] = 0;
+  ++bg_shot_count[n];
+  bg_shot_tic[n] = leveltime;
+}
+
+void bg_NoteHit(const mobj_t* target, const mobj_t* inflictor, const mobj_t* source)
+{
+  const player_t* p;
+  int n;
+
+  if (!bg_weapons || !source || !source->player || target == source || (inflictor && inflictor != source))
+    return;
+  if (!(target->flags & MF_COUNTKILL) && !target->player)
+    return;
+  p = source->player;
+  if (bg_WeaponSlot(bg_SelectedWeapon(p)) != 1)
+    return;
+  n = (int) (p - players);
+  if (n >= 0 && n < MAX_MAXPLAYERS)
+    bg_hit_tic[n] = leveltime;
+}
+
+bg_grit_t bg_FaceGritRule(const player_t* player)
+{
+  if (!bg_weapons)
+    return BG_GRIT_STOCK;
+  switch (bg_WeaponSlot(bg_SelectedWeapon(player)))
+  {
+    case 1: return BG_GRIT_ONHIT;
+    case 2: return player->altactive ? BG_GRIT_NEVER : BG_GRIT_STOCK;
+    case 3: return BG_GRIT_SHOTS;
+    case 4: return BG_GRIT_HALF;
+    default: return BG_GRIT_STOCK;
+  }
+}
+
+dboolean bg_FaceGritNow(const player_t* player, bg_grit_t rule)
+{
+  int n = (int) (player - players);
+
+  if (n < 0 || n >= MAX_MAXPLAYERS)
+    return false;
+  if (rule == BG_GRIT_ONHIT)
+    return leveltime >= bg_hit_tic[n] && leveltime - bg_hit_tic[n] <= BG_GRIT_HIT_TICS && bg_hit_tic[n] > 0;
+  if (rule == BG_GRIT_SHOTS)
+    return bg_shot_count[n] >= 2 && leveltime - bg_shot_tic[n] <= BG_GRIT_SHOT_WINDOW;
+  return false;
+}
+
+//
 // Fire mode switching
 //
 
@@ -2529,6 +2593,38 @@ void dsda_BegottenSelfTest(void)
   p.cmd.ex.actions = XC_ALT;
   CHECK(!bg_BeginFire(&p) && p.readyweapon == wp_pistol && !p.altactive,
         "no ammo: alt fire does nothing");
+
+  // status face grit per weapon
+  {
+    player_t* sp = &players[0];
+    weapontype_t save_r = sp->readyweapon, save_p = sp->primaryweapon;
+    int save_a = sp->altactive;
+    static const struct { weapontype_t w; int alt; bg_grit_t rule; const char* what; } g[] = {
+      { wp_fist, 0, BG_GRIT_ONHIT, "knife grits when it hits" }, { wp_chainsaw, 0, BG_GRIT_ONHIT, "chainsaw grits when it hits" },
+      { wp_pistol, 0, BG_GRIT_STOCK, "pistol primary: stock delay" }, { wp_pistol, 1, BG_GRIT_NEVER, "pistol secondary: never" },
+      { wp_shotgun, 0, BG_GRIT_SHOTS, "shotgun: second shot" }, { wp_shotgun, 1, BG_GRIT_SHOTS, "shotgun secondary: second shot" },
+      { wp_chaingun, 0, BG_GRIT_HALF, "chaingun: half the delay" }, { wp_plasma, 0, BG_GRIT_STOCK, "magic: stock delay" },
+      { wp_hellfire, 0, BG_GRIT_STOCK, "alien weapon: stock delay" },
+    };
+    int gi;
+
+    for (gi = 0; gi < (int) (sizeof g / sizeof g[0]); ++gi)
+    {
+      sp->primaryweapon = g[gi].w;
+      sp->altactive = g[gi].alt;
+      sp->readyweapon = g[gi].alt ? (weapontype_t) bg_slot_alt[bg_WeaponSlot(g[gi].w)] : g[gi].w;
+      CHECK(bg_FaceGritRule(sp) == g[gi].rule, g[gi].what);
+    }
+    sp->readyweapon = wp_shotgun; sp->altactive = 0;
+    leveltime = 1000; bg_NoteShot(sp);
+    CHECK(!bg_FaceGritNow(sp, BG_GRIT_SHOTS), "shotgun: one shot does not grit");
+    leveltime = 1040; bg_NoteShot(sp);
+    CHECK(bg_FaceGritNow(sp, BG_GRIT_SHOTS), "shotgun: the second shot grits");
+    leveltime = 1300;
+    CHECK(!bg_FaceGritNow(sp, BG_GRIT_SHOTS), "shotgun: the grit ends after the hold");
+    sp->readyweapon = save_r; sp->primaryweapon = save_p; sp->altactive = save_a;
+    leveltime = 0;
+  }
 
   selftest_failures += bg_PickupSelfTest();
   lprintf(LO_INFO, "BEGOTTEN SELFTEST (weapons): %s (%d failures)\n",

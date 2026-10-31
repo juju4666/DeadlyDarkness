@@ -1456,6 +1456,9 @@ void P_DamageMobj(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage)
   if (!(target->flags & (MF_SHOOTABLE | MF_BOUNCES)))
     return; // shouldn't happen...
 
+  if (bg_weapons && damage > 0)
+    bg_NoteHit(target, inflictor, source);   // begotten: the status face grits while melee blows land
+
   if (target->health <= 0)
   {
     // hexen

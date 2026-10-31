@@ -777,11 +777,23 @@ static void ST_updateFaceWidget(void)
 
   if (priority < 6)
     {
-      // rapid firing
-      if (plyr->attackdown)
+      // rapid firing; begotten: the weapon decides when (see bg_FaceGritRule)
+      bg_grit_t rule = bg_FaceGritRule(plyr);
+
+      if (rule == BG_GRIT_ONHIT || rule == BG_GRIT_SHOTS)
+        {
+          lastattackdown = -1;
+          if (bg_FaceGritNow(plyr, rule) && (rule == BG_GRIT_ONHIT || plyr->attackdown))
+            {
+              priority = 5;
+              faceindex = ST_RAMPAGEOFFSET;
+              st_facecount = 1;
+            }
+        }
+      else if (plyr->attackdown && rule != BG_GRIT_NEVER)
         {
           if (lastattackdown==-1)
-            lastattackdown = ST_RAMPAGEDELAY;
+            lastattackdown = rule == BG_GRIT_HALF ? ST_RAMPAGEDELAY / 2 : ST_RAMPAGEDELAY;
           else if (!--lastattackdown)
             {
               priority = 5;

@@ -41,6 +41,17 @@ weapontype_t bg_PrimaryOf(weapontype_t weapon);
 // The weapon the player has "selected": primaryweapon while a secondary mode fires.
 weapontype_t bg_SelectedWeapon(const player_t* player);
 
+// Status face "grit" (the rampage face) per weapon:
+//  knife and chainsaw: while blows land; pistol: stock delay for the primary, never for the secondary;
+//  shotgun slot: from the second shot of a hold; chaingun slot: half the stock delay; the rest: stock.
+// bg_NoteShot: a shot was fired. bg_NoteHit: `source` damaged `target` (melee blows are told apart here).
+void bg_NoteShot(const player_t* player);
+void bg_NoteHit(const mobj_t* target, const mobj_t* inflictor, const mobj_t* source);
+typedef enum { BG_GRIT_STOCK, BG_GRIT_HALF, BG_GRIT_NEVER, BG_GRIT_ONHIT, BG_GRIT_SHOTS } bg_grit_t;
+bg_grit_t bg_FaceGritRule(const player_t* player);
+// true while the rule's condition holds (ONHIT: a blow landed in the last 14 tics; SHOTS: second shot of the hold)
+dboolean bg_FaceGritNow(const player_t* player, bg_grit_t rule);
+
 // Alt-fire handling inside P_FireWeapon: swaps readyweapon to the slot's secondary
 // mode (or back to the primary) according to the alt-fire state of the current
 // ticcmd. Returns false if the shot must not happen (alt requested but unusable).

@@ -882,3 +882,12 @@ The software renderer now draws with a palette of **512 colours** instead of 256
 ## 0.11.1
 
 - **Fix (Windows): lights, halos and translucency drew black.** The nearest-colour search of the 512-colour palette kept its best distance in a `long`; on Windows a `long` is 32 bits, so the start value overflowed and almost no colour was ever found (the search returned black). Everything that goes through it was affected: coloured and dynamic light pools on walls, halos and coronas, fog, translucency tables. It now uses 64-bit integers, and a selftest compares the search with a plain scan of the palette.
+
+## 0.11.2
+
+- **Witch faces redone** from the new photos (`Hi-def croppeds`: head and body). Same process as before, rerun: `game/face_witch/tools/measure.py` measures the landmarks (mediapipe 0.10.14, Python 3.12), `layout.py` scales every photo so the eyes-to-mouth distance is **57.8 px (15% smaller than the 68 px of the first set)** and puts the middle of eyes and mouth at (96, 93) of the 192 x 176 box, centred on the cheeks; the neck and jacket now show below the chin. Run `layout.py <photos> landmarks.json <out> [D] [CY]` to change D or CY. Photo to lump: `Idle_Left/Idle/Idle_Right` (healthy for pain 0-2, hurt for 3-4) = `WCHST*0/1/2`; `Damage_Right_*` = `WCHTR*0`; `Damage_Left_Hurt` = `WCHTL*0` (**no healthy "damage left" photo in the set, so the hurt one is used for all five levels**); `Shock_Healthy / Shock_Front_Hurt` = `WCHOUCH*`; `Grin_Healthy / Grin_Front_Hurt` = `WCHEVL*`; `Damage_Hurt / Damage_Front_Hurt` = `WCHKILL*` (healthy / hurt); `God_Mode` = `WCHGOD0`; `Dead` = `WCHDEAD0`. The lumps are wide (512-colour) pictures, dithered with all 512 colours.
+- **Grit face per weapon.** The status face's rapid-fire "grit" now depends on the weapon: knife and chainsaw grit only while their blows land on an enemy (for 14 tics after each hit); pistol primary as in Doom (after 2 seconds of holding), pistol secondary never; shotgun slot (both modes) from the second shot of a hold; chaingun slot (both modes) after half the stock time (1 second); all spell weapons and the alien weapon as in Doom. Engine: `bg_FaceGritRule` in `dsda/begotten.c`, used by `ST_updateFaceWidget`.
+
+## 0.11.3
+
+- **Witch faces smaller and lower again:** the head is another 15% smaller (eyes to mouth 49.1 px) and the middle of eyes and mouth sits lower in the box (y 106 instead of 93), so more of the top of the head and hair shows and less of the clothes. `layout.py <photos> landmarks.json <out> 49.1 106` regenerates them.

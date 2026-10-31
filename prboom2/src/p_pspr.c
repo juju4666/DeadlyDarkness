@@ -505,6 +505,8 @@ static void P_FireWeapon(player_t *player)
     return;
 
   dsda_WatchWeaponFire(player->readyweapon);
+  if (bg_weapons)
+    bg_NoteShot(player);
 
   P_SetMobjState(player->mo, pclass[player->pclass].fire_weapon_state);
 
