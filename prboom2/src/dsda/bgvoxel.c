@@ -994,6 +994,19 @@ int bgvox_CellsDrawn(void)
   return cells_drawn;
 }
 
+// is this thing drawn as a model? (its shadow is then the plain capsule: the sprite is not what is seen)
+dboolean bgvox_IsModel(const mobj_t* thing)
+{
+  const vprop_t* p;
+  int f;
+
+  if (!num_props || !thing->state || thing->player)
+    return false;
+  p = prop_of_sprite(thing->state->sprite);
+  f = thing->state->frame & 0x7fff;
+  return p && f >= 0 && f <= 3 && p->fr[f].model >= 0;
+}
+
 int bgvox_Project(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz, int* x1, int* x2, fixed_t* scale,
                   fixed_t* gz, fixed_t* gzt)
 {

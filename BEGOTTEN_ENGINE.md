@@ -952,3 +952,15 @@ crushed. Keep the polyobject portal faces on the sides, not the end caps (end ca
 `BEGOTTEN_SELFTEST=P` (live test on the test map), `BEGOTTEN_PORTALDEBUG`, `BEGOTTEN_PORTALSPIN` (turns polyobject
 1), `BEGOTTEN_TELEPORT="x y angle"`. `tools/make_portal_test_map.py OUT.wad [ZDBSP]` builds the test map
 (`POLY=1` adds the rotating two-faced panel).
+
+## 0.12.1 - things cast the shadow of their sprite
+
+Solid things (the player, monsters, barrels, columns, lamps) used to shadow lights as upright capsules. They now cast
+the shadow of their own picture, as seen from the light: the frame is picked from the light's side (the same rotation
+choice the renderer makes for a camera, so a light behind the witch casts her back view), and a light ray is stopped
+only where it passes through an opaque pixel of that picture, drawn at the sprite scale and offsets. A light almost
+overhead (higher above the thing than 1.4x its horizontal distance) has no side to look at and uses the capsule
+instead, so the shadow does not flicker between frames. Voxel props keep the capsule (the sprite is not what is seen).
+Lights inside a thing's radius still ignore it.
+Test aids: tools/make_portal_test_map.py takes EXTRA='type x y [angle];...' (extra things), ALIGHT (room A's light
+level) and BGLIGHT (text of a BGLIGHT lump), e.g. a dark room with `light 20202 lamp_m ... movable shadow`.

@@ -15,7 +15,7 @@ def rect(x1, y1, x2, y2):          # clockwise: the room is on the right of ever
     return [(x1, y1), (x1, y2), (x2, y2), (x2, y1)]
 
 rooms = {
-    'A': dict(poly=rect(0, 0, 512, 512), floor=0, ceil=128, light=140, ftex='FLOOR2', ctex='CEIL1', wall='WALL02'),
+    'A': dict(poly=rect(0, 0, 512, 512), floor=0, ceil=128, light=int(os.environ.get('ALIGHT', 140)), ftex='FLOOR2', ctex='CEIL1', wall='WALL02'),
     'B': dict(poly=rect(2000, 0, 2512, 512), floor=32, ceil=160, light=210, ftex='FLOOR3', ctex='CEIL2', wall='WALL05'),
     'C': dict(poly=rect(4000, 0, 4512, 512), floor=-16, ceil=112, light=int(os.environ.get('CLIGHT', 100)), ftex='FLOOR1', ctex='CEIL1', wall='WALL09'),
 }
@@ -117,6 +117,9 @@ def build():
     if os.environ.get('POLY'):
         out.append('thing { x = %d.0; y = %d.0; angle = 1; type = 9300; skill1 = true; skill2 = true; skill3 = true; skill4 = true; skill5 = true; single = true; coop = true; dm = true; }' % (cx, cy))
         out.append('thing { x = %d.0; y = %d.0; angle = 1; type = 9301; skill1 = true; skill2 = true; skill3 = true; skill4 = true; skill5 = true; single = true; coop = true; dm = true; }' % (cx, cy))
+    for e in filter(None, os.environ.get('EXTRA', '').split(';')):     # EXTRA='type x y [angle];...' more things (a light, a monster)
+        v = [int(q) for q in e.split()]
+        thing(v[0], v[1], v[2], v[3] if len(v) > 3 else 0)
     # A: a marker near the portals
     thing(2007, 400, 100)
     return '\n'.join(out) + '\n'
@@ -146,7 +149,10 @@ def main():
     if not zd:
         shutil.copy(src, out); print('no zdbsp'); return
     subprocess.check_call([zd, '-w', '-o', os.path.join(tmp, 'out.wad'), src])
-    wad(out, read_wad(os.path.join(tmp, 'out.wad')))
+    lumps = read_wad(os.path.join(tmp, 'out.wad'))
+    if os.environ.get('BGLIGHT'):        # extra light definitions, e.g. 'light 20202 lamp_m radius 900 strength 1.5 height 60 movable shadow'
+        lumps.append(('BGLIGHT', os.environ['BGLIGHT'].encode()))
+    wad(out, lumps)
     print('wrote', out)
 
 if __name__ == '__main__':

@@ -27,6 +27,8 @@ void bgvox_NewLevel(void);
 // every frame, after the view is set up
 void bgvox_BeginFrame(void);
 
+dboolean bgvox_IsModel(const mobj_t* thing);   // drawn as a model (no sprite)
+
 // Is this thing drawn as a voxel model? If so, makes this frame's instance of it and returns its number + 1, with its
 // screen extent; 0 when it is a normal sprite (or off the screen).
 int bgvox_Project(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz, int* x1, int* x2, fixed_t* scale,
