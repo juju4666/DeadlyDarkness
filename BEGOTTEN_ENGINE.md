@@ -979,3 +979,14 @@ level) and BGLIGHT (text of a BGLIGHT lump), e.g. a dark room with `light 20202 
   .DirIcon), and the generator did not look at linuxdeploy's exit code. A 256x256 PNG icon is installed now
   (ICONS/begotten-256.png), copied to the top of the AppDir, linuxdeploy's failure stops CPack, and the .appimage is
   copied to build/ wherever linuxdeploy left it. Checked by running `cpack -G External` on a Linux machine.
+
+## 0.12.3 - lights of a burst of shots no longer sink the frame rate
+
+Holding the alt fire of a lightning weapon made dozens of projectiles, puffs and explosions, and each one was a light
+that cast shadows (a ray per lit point per light, plus the things as occluders). Now:
+- lights of projectiles, explosions and puffs ("effect lights") are only made within 900 units of the eye, and at most
+  4 per frame;
+- only the nearest 1 of them casts shadows, and none of them is shadowed by things (walls still shadow them);
+- the flashlight, the gun flash, power-up glows, placed lamps and gyro lights are unchanged.
+Measured here with a held lightning alt fire (software, 1280x720): 12 fps before, 36 fps after. `BGLIGHT_NOCAP=1` (test
+aid) switches the limits off. The tunables are BG_EFFECT_REACH / BG_EFFECT_MAX / BG_EFFECT_SHADOWS in bglight.c.
