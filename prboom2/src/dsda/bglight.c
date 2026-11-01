@@ -1004,15 +1004,39 @@ static dboolean bg_IsPowerup(int type)
 }
 
 // projectiles, their explosions and the flashes of guns
-#define BG_EFFECT_REACH 900.0    // projectile/explosion/puff lights farther than this from the eye are not made
-#define BG_EFFECT_MAX 4          // ... and no more than this many of them in a frame
-#define BG_EFFECT_SHADOWS 1      // of those, only the nearest ones cast shadows
+// Limits on the lights of projectiles, explosions and puffs. With the threaded renderer (0.13) they are off by default
+// (as before 0.12.3: all of them are made, all cast shadows, things block them); to bring them back for a slow machine set
+// BEGOTTEN_EFFECT_MAX=n (lights made per frame), BEGOTTEN_EFFECT_SHADOWS=n (of those, how many cast shadows, nearest first),
+// BEGOTTEN_EFFECT_REACH=units, BEGOTTEN_EFFECT_THINGS=0 (things do not block their light).
+static int bg_effect_max = -1, bg_effect_shadows, bg_effect_things;
+static double bg_effect_reach;
+
+static void bg_EffectLimits(void)
+{
+  const char* e;
+
+  if (bg_effect_max >= 0)
+    return;
+  e = getenv("BEGOTTEN_EFFECT_MAX");
+  bg_effect_max = e ? atoi(e) : 1000;
+  e = getenv("BEGOTTEN_EFFECT_SHADOWS");
+  bg_effect_shadows = e ? atoi(e) : 1000;
+  e = getenv("BEGOTTEN_EFFECT_REACH");
+  bg_effect_reach = e ? atof(e) : 1e9;
+  e = getenv("BEGOTTEN_EFFECT_THINGS");
+  bg_effect_things = e ? atoi(e) != 0 : 1;
+}
+#define BG_EFFECT_REACH bg_effect_reach
+#define BG_EFFECT_MAX bg_effect_max
+#define BG_EFFECT_SHADOWS bg_effect_shadows
 
 // the effect lights that cast shadows: all but the nearest BG_EFFECT_SHADOWS lose them (a ray per lit point and light is
 // what a burst of shots would otherwise cost)
 static void bg_LimitEffectShadows(void)
 {
   int i, j, kept = 0;
+
+  bg_EffectLimits();
   double vx = bg_Fix(viewx), vy = bg_Fix(viewy);
 
   for (i = 0; i < num_lights; ++i)
@@ -1031,7 +1055,7 @@ static void bg_LimitEffectShadows(void)
       if (dj < di || (dj == di && j < i))
         ++nearer;
     }
-    if (nearer >= BG_EFFECT_SHADOWS && !bg_EnvOnce(&env_nocap, "BGLIGHT_NOCAP"))      // (BGLIGHT_NOCAP: test aid, the old behaviour)
+    if (nearer >= BG_EFFECT_SHADOWS)
       lights[i].shadow = false;
     else
       ++kept;
@@ -1042,6 +1066,8 @@ static void bg_AddDynamicLights(void)
 {
   thinker_t* th;
   int i, effect_count = 0;
+
+  bg_EffectLimits();
 
   for (th = thinkercap.next; th != &thinkercap; th = th->next)
   {
@@ -1103,7 +1129,7 @@ static void bg_AddDynamicLights(void)
       double ex, ey;
 
       bg_MobjPos(mo, &ex, &ey, &z);
-      if (!bg_EnvOnce(&env_nocap, "BGLIGHT_NOCAP") && (hypot(ex - bg_Fix(viewx), ey - bg_Fix(viewy)) > BG_EFFECT_REACH || effect_count >= BG_EFFECT_MAX))
+      if (hypot(ex - bg_Fix(viewx), ey - bg_Fix(viewy)) > BG_EFFECT_REACH || effect_count >= BG_EFFECT_MAX)
         continue;
       ++effect_count;
     }
@@ -2602,7 +2628,7 @@ static dboolean bg_ShadowLit(const bg_light_t* L, double px, double py, double p
   }
   if (!bg_Los(&world_los, L->a[0], L->a[1], L->a[2], tx, ty, tz))
     return false;
-  return num_occ == 0 || (L->effect && !bg_EnvOnce(&env_nocap, "BGLIGHT_NOCAP")) || !bg_ThingBlocks(L->a[0], L->a[1], L->a[2], tx, ty, tz);
+  return num_occ == 0 || (L->effect && !bg_effect_things) || !bg_ThingBlocks(L->a[0], L->a[1], L->a[2], tx, ty, tz);
 }
 
 // the spilled light of a sector does not go where its light cannot: a point in the shadow of a wall, a ledge or a pillar

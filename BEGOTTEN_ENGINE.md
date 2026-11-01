@@ -1014,3 +1014,12 @@ halos, weather and the weapon are still drawn on the main thread, afterwards.
   creation of patches or textures. `BEGOTTEN_PHASES=1` prints where the frame's time goes every 120 frames,
   `BEGOTTEN_THREADSTATS=1` how many tasks each thread took.
 - Also: getenv calls in the lighting hot paths (per ray!) are read once now; the shot-light cap of 0.12.3 had one.
+
+## 0.13.1 - shot lights and their shadows are back
+
+The limits on the lights of projectiles, explosions and puffs (0.12.3) are off by default now that the renderer is
+threaded: all of them are made, all cast shadows, and things block them again. For a slow machine they can be brought
+back with environment variables: `BEGOTTEN_EFFECT_MAX=n` (made per frame), `BEGOTTEN_EFFECT_SHADOWS=n` (of those, how many
+cast shadows, nearest first), `BEGOTTEN_EFFECT_REACH=units`, `BEGOTTEN_EFFECT_THINGS=0` (things do not block them).
+My numbers on the 2-core test machine, held lightning alt fire, 1280x720 software: 24 fps with 1 thread, 33 fps with 2
+(for comparison the old limited setting gave 36 fps with 1 thread).
