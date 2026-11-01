@@ -2151,15 +2151,31 @@ static void bg_WorldLosEnsure(void)
 // Things that stop a beam: solid monsters, players, columns, barrels, seen as upright cylinders (radius, height). Gathered
 // once a frame, only those near a light that casts shadows.
 #define BG_MAXOCC 48
-typedef struct { double x, y, r, zb, zt; const mobj_t* mo; dboolean sprite; } bg_occ_t;
+typedef struct
+{
+  double x, y, r, zb, zt;
+  double rcap;                 // the capsule's radius: the thing's, or the picture's if that is narrower
+  const mobj_t* mo;
+  dboolean sprite;             // casts the shadow of its picture (not a model)
+  dboolean haspic;             // (set by bg_RevolveBlocks) the picture was found, so the capsule is not wanted
+  double zfoot;                // the height the picture's top offset is measured from
+  double clx[2], cly[2];       // the picture shown to the last two light places
+  const rpatch_t* cpatch[2];
+  dboolean cflip[2], cache_ok[2];
+  int cnext;
+} bg_occ_t;
 static bg_occ_t occ[BG_MAXOCC];
 static int num_occ;
+static dboolean bg_capsule_only;   // (test aid) BGLIGHT_CAPSULE: the old capsule shadows, to compare speed
+
+static const rpatch_t* bg_SpriteFor(const mobj_t* mo, double lx, double ly, dboolean* flipped);
 
 static void bg_CollectOccluders(void)
 {
   thinker_t* th;
 
   num_occ = 0;
+  bg_capsule_only = getenv("BGLIGHT_CAPSULE") != NULL;
   if (!thing_shadows_on || !dsda_IntConfig(dsda_config_begotten_thing_shadows) || getenv("BGLIGHT_NOTHINGSHADOW"))   // (the env switch is for tests)
     return;
   for (th = thinkercap.next; th != &thinkercap && num_occ < BG_MAXOCC; th = th->next)
@@ -2191,34 +2207,33 @@ static void bg_CollectOccluders(void)
     occ[num_occ].zt = bg_Fix(mo->z) + bg_Fix(mo->height);
     occ[num_occ].mo = mo;
     occ[num_occ].sprite = !bgvox_IsModel(mo);   // a model keeps the capsule
+    occ[num_occ].zfoot = bg_Fix(mo->z);
+    occ[num_occ].rcap = r;
+    occ[num_occ].cache_ok[0] = occ[num_occ].cache_ok[1] = false;
+    occ[num_occ].cnext = 0;
     ++num_occ;
   }
 }
 
 // The sprite a thing shows to a light: what the light would see if it were the eye (the rotation picked from the light's
-// side, as the renderer picks it for the camera). Returns the picture's opaque test for the point (u, z) on a plane through
-// the thing's centre that faces the light: u is the offset to the right as the light sees it, z the height.
-static dboolean bg_SpriteSolidAt(const mobj_t* mo, double lx, double ly, double u, double z, dboolean* have)
+// side, as the renderer picks it for a camera). `lx`, `ly` are the light's place (map units).
+static const rpatch_t* bg_SpriteFor(const mobj_t* mo, double lx, double ly, dboolean* flipped)
 {
-  int bgsprite = mo->sprite, bgframe = mo->frame, lump, col, row, i;
+  int bgsprite = mo->sprite, bgframe = mo->frame, lump;
   const spritedef_t* sprdef;
   const spriteframe_t* sprframe;
-  const rpatch_t* patch;
-  const rcolumn_t* c;
   dboolean flip;
-  double s = bg_Fix(bg_scale_sprites);
 
-  *have = false;
   if (mo->player)
   {
     if (!bg_PlayerPose(mo, &bgsprite, &bgframe))
       bgsprite = bg_ClassSprite(mo->player->bgclass, mo->sprite, mo->frame);
   }
   if ((unsigned) bgsprite >= (unsigned) num_sprites)
-    return true;
+    return NULL;
   sprdef = &sprites[bgsprite];
   if (!sprdef->spriteframes || (bgframe & FF_FRAMEMASK) >= sprdef->numframes)
-    return true;
+    return NULL;
   sprframe = &sprdef->spriteframes[bgframe & FF_FRAMEMASK];
   if (sprframe->rotate)
   {
@@ -2236,7 +2251,97 @@ static dboolean bg_SpriteSolidAt(const mobj_t* mo, double lx, double ly, double 
     lump = sprframe->lump[0];
     flip = (dboolean) (sprframe->flip & 1);
   }
-  patch = R_PatchByNum(lump + firstspritelump);
+  *flipped = flip;
+  return R_PatchByNum(lump + firstspritelump);
+}
+
+static const rpatch_t* bg_OccPatch(bg_occ_t* o, double lx, double ly, dboolean* flip)
+{
+  int i;
+
+  for (i = 0; i < 2; ++i)
+    if (o->cache_ok[i] && o->clx[i] == lx && o->cly[i] == ly)
+    {
+      *flip = o->cflip[i];
+      return o->cpatch[i];
+    }
+  i = o->cnext;
+  o->cnext ^= 1;
+  o->cache_ok[i] = true;
+  o->clx[i] = lx;
+  o->cly[i] = ly;
+  o->cpatch[i] = bg_SpriteFor(o->mo, lx, ly, &o->cflip[i]);
+  *flip = o->cflip[i];
+  return o->cpatch[i];
+}
+
+// how far from the picture's centre line its opaque pixels reach in each row (picture pixels; 0 = the row is empty).
+// Worked out once per picture. A light almost overhead has no side to look at: the thing is then seen as the solid that
+// turns this profile round, which is steady as the light moves and about as wide as the picture really is.
+#define BG_MAXPROFILES 96
+static struct { const rpatch_t* patch; short* half; } profiles[BG_MAXPROFILES];
+static int num_profiles;
+
+static const short* bg_RowHalfWidths(const rpatch_t* patch)
+{
+  int i, col, k, r;
+  short* half;
+  int* lo;
+  int* hi;
+
+  for (i = 0; i < num_profiles; ++i)
+    if (profiles[i].patch == patch)
+      return profiles[i].half;
+  if (num_profiles >= BG_MAXPROFILES)
+    num_profiles = 0;                       // (a cache: start again, leaking nothing since we free below)
+  if (profiles[num_profiles].half)
+    free(profiles[num_profiles].half);
+  half = (short*) calloc(patch->height, sizeof(short));
+  lo = (int*) malloc(patch->height * sizeof(int));
+  hi = (int*) malloc(patch->height * sizeof(int));
+  for (r = 0; r < patch->height; ++r)
+  {
+    lo[r] = 1 << 30;
+    hi[r] = -1;
+  }
+  for (col = 0; col < patch->width; ++col)
+  {
+    const rcolumn_t* c = R_GetPatchColumnClamped(patch, col);
+
+    for (k = 0; k < c->numPosts; ++k)
+      for (r = c->posts[k].topdelta; r < c->posts[k].topdelta + c->posts[k].length && r < patch->height; ++r)
+        if (r >= 0)
+        {
+          if (col < lo[r]) lo[r] = col;
+          if (col > hi[r]) hi[r] = col;
+        }
+  }
+  for (r = 0; r < patch->height; ++r)
+    if (hi[r] >= 0)
+    {
+      int l = patch->leftoffset - lo[r], rr = hi[r] + 1 - patch->leftoffset;
+
+      half[r] = (short) (l > rr ? l : rr);
+    }
+  free(lo);
+  free(hi);
+  profiles[num_profiles].patch = patch;
+  profiles[num_profiles].half = half;
+  return profiles[num_profiles++].half;
+}
+
+// the picture's opaque test for the point (u, z) on the plane through the thing's centre that faces the light: u is the
+// offset to the right as the light sees it, z the height. The picture is looked up once per light position and frame.
+static dboolean bg_SpriteSolidAt(bg_occ_t* o, double lx, double ly, double u, double z, dboolean* have)
+{
+  const rpatch_t* patch;
+  dboolean flip = false;
+  const rcolumn_t* c;
+  double s = bg_Fix(bg_scale_sprites);
+  int col, row, i;
+
+  *have = false;
+  patch = bg_OccPatch(o, lx, ly, &flip);
   if (!patch || patch->width <= 0 || patch->height <= 0)
     return true;
   *have = true;
@@ -2244,7 +2349,7 @@ static dboolean bg_SpriteSolidAt(const mobj_t* mo, double lx, double ly, double 
     col = patch->width - 1 - (int) floor(u * s + patch->width - patch->leftoffset);
   else
     col = (int) floor(u * s + patch->leftoffset);
-  row = (int) floor((bg_Fix(mo->z) + patch->topoffset / s - z) * s);
+  row = (int) floor((o->zfoot + patch->topoffset / s - z) * s);
   if (col < 0 || col >= patch->width || row < 0 || row >= patch->height)
     return false;
   c = R_GetPatchColumnClamped(patch, col);
@@ -2255,6 +2360,48 @@ static dboolean bg_SpriteSolidAt(const mobj_t* mo, double lx, double ly, double 
 }
 
 // does a thing stand between the light and the target? (a thing the light is inside, or the target is on, never does)
+// the shadow of a thing seen by a light that is nearly overhead: the picture's profile turned round the thing's axis.
+// The ray is followed through the cylinder that holds the picture, in steps that are a pixel or so long.
+static dboolean bg_RevolveBlocks(bg_occ_t* o, double lx, double ly, double lz, double rx, double ry, double tz, double a)
+{
+  dboolean flip;
+  const rpatch_t* patch = bg_OccPatch(o, lx, ly, &flip);
+  const short* half;
+  double s = bg_Fix(bg_scale_sprites), rmax, dx = lx - o->x, dy = ly - o->y, b, c, disc, sq, t1, t2, dt;
+  int n, k;
+
+  o->haspic = false;
+  if (!patch || patch->width <= 0 || patch->height <= 0)
+    return false;
+  o->haspic = true;
+  rmax = (patch->leftoffset > patch->width - patch->leftoffset ? patch->leftoffset : patch->width - patch->leftoffset) / s;
+  b = 2.0 * (dx * rx + dy * ry);
+  c = dx * dx + dy * dy - rmax * rmax;
+  disc = b * b - 4.0 * a * c;
+  if (disc < 0)
+    return false;
+  sq = sqrt(disc);
+  t1 = (-b - sq) / (2.0 * a);
+  t2 = (-b + sq) / (2.0 * a);
+  if (t2 <= 0 || t1 >= 1.0)
+    return false;
+  if (t1 < 0) t1 = 0;
+  if (t2 > 1.0) t2 = 1.0;
+  half = bg_RowHalfWidths(patch);
+  n = (int) ((t2 - t1) * sqrt(a + (tz - lz) * (tz - lz)) * s) + 1;     // about one picture pixel per step
+  if (n > 40) n = 40;
+  dt = (t2 - t1) / n;
+  for (k = 0; k <= n; ++k)
+  {
+    double t = t1 + dt * k, px = lx + rx * t - o->x, py = ly + ry * t - o->y, z = lz + (tz - lz) * t;
+    int row = (int) floor((o->zfoot + patch->topoffset / s - z) * s);
+
+    if (row >= 0 && row < patch->height && half[row] > 0 && sqrt(px * px + py * py) * s <= half[row])
+      return true;
+  }
+  return false;
+}
+
 static dboolean bg_ThingBlocks(double lx, double ly, double lz, double tx, double ty, double tz)
 {
   double rx = tx - lx, ry = ty - ly, a = rx * rx + ry * ry;
@@ -2264,13 +2411,13 @@ static dboolean bg_ThingBlocks(double lx, double ly, double lz, double tx, doubl
     return false;
   for (i = 0; i < num_occ; ++i)
   {
-    const bg_occ_t* o = &occ[i];
+    bg_occ_t* o = &occ[i];
     double dx = lx - o->x, dy = ly - o->y, ex = tx - o->x, ey = ty - o->y;
     double b, c, disc, sq, t1, t2, z1, z2;
 
     if (dx * dx + dy * dy < o->r * o->r || ex * ex + ey * ey < (o->r + 2.0) * (o->r + 2.0))
       continue;
-    if (o->sprite)
+    if (o->sprite && !bg_capsule_only)
     {
       // the shadow of the picture: the ray is stopped where it crosses the plane through the thing that faces the light,
       // if it crosses the picture's opaque part. A light almost overhead has no side to look at: the capsule then.
@@ -2278,8 +2425,10 @@ static dboolean bg_ThingBlocks(double lx, double ly, double lz, double tx, doubl
       double fx = -dx / hd, fy = -dy / hd, den = rx * fx + ry * fy, t, px, py, pz, u;
       dboolean have, solid;
 
-      if (hd > 0.7 * fabs(lz - mid) && hd > o->r * 1.5 && den > 1e-6)
+      if (hd > 0.3 * fabs(lz - mid) && hd > o->r * 1.5)
       {
+        if (den <= 1e-6)
+          continue;      // the ray goes away from the picture
         t = hd / den;
         if (t <= 0 || t >= 1.0)
           continue;      // the target is before the plane, or behind it with nothing in between
@@ -2287,7 +2436,7 @@ static dboolean bg_ThingBlocks(double lx, double ly, double lz, double tx, doubl
         py = ly + ry * t - o->y;
         pz = lz + (tz - lz) * t;
         u = px * fy - py * fx;   // to the right of the line from the light to the thing
-        solid = bg_SpriteSolidAt(o->mo, lx, ly, u, pz, &have);
+        solid = bg_SpriteSolidAt(o, lx, ly, u, pz, &have);
         if (have)
         {
           if (solid)
@@ -2295,9 +2444,13 @@ static dboolean bg_ThingBlocks(double lx, double ly, double lz, double tx, doubl
           continue;
         }
       }
+      else if (bg_RevolveBlocks(o, lx, ly, lz, rx, ry, tz, a))
+        return true;
+      else if (o->haspic)
+        continue;
     }
     b = 2.0 * (dx * rx + dy * ry);
-    c = dx * dx + dy * dy - o->r * o->r;
+    c = dx * dx + dy * dy - o->rcap * o->rcap;
     disc = b * b - 4.0 * a * c;
     if (disc < 0)
       continue;

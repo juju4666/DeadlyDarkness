@@ -964,3 +964,18 @@ instead, so the shadow does not flicker between frames. Voxel props keep the cap
 Lights inside a thing's radius still ignore it.
 Test aids: tools/make_portal_test_map.py takes EXTRA='type x y [angle];...' (extra things), ALIGHT (room A's light
 level) and BGLIGHT (text of a BGLIGHT lump), e.g. a dark room with `light 20202 lamp_m ... movable shadow`.
+
+## 0.12.2 - shadow shapes from overhead lights, and the Linux CI package
+
+- A light nearly overhead (a ceiling lamp over the player) used to fall back to the thing's full capsule, which was far
+  wider than the picture. The fallback is now the picture's own outline turned round the thing's axis (per-row width of
+  its opaque pixels), which is as wide as the sprite really is and does not flicker as the light moves. The switch from
+  the facing-the-light picture to this happens at an elevation of about 73 degrees (horizontal distance under 0.3x the
+  height difference). Pictures are looked up once per light place (two cached per thing).
+- `BGLIGHT_CAPSULE=1` (test aid) brings back the old capsules, to compare speed. Measured here (software, 1280x720,
+  one shadow lamp): picture shadows cost the same as capsules, and thing shadows altogether about 8% of the frame; the
+  in-game option "thing shadows" turns them off.
+- Linux CI: the AppImage was not produced because appimagetool refuses an AppDir with only an SVG icon (no PNG for
+  .DirIcon), and the generator did not look at linuxdeploy's exit code. A 256x256 PNG icon is installed now
+  (ICONS/begotten-256.png), copied to the top of the AppDir, linuxdeploy's failure stops CPack, and the .appimage is
+  copied to build/ wherever linuxdeploy left it. Checked by running `cpack -G External` on a Linux machine.
