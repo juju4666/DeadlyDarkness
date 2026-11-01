@@ -1140,8 +1140,23 @@ static void R_RenderBSPNodes(void)
 // R_RenderView
 //
 
+// (test aid) BEGOTTEN_PHASES: where the frame's time goes, printed every 120 frames
+static double ph_t[8];
+static int ph_n;
+static double PhNow(void)
+{
+  return (double) SDL_GetPerformanceCounter() * 1000.0 / (double) SDL_GetPerformanceFrequency();
+}
+
 void R_RenderPlayerView (player_t* player)
 {
+  static int ph_on = -1;
+  double ph0 = 0, ph1;
+
+  if (ph_on < 0)
+    ph_on = getenv("BEGOTTEN_PHASES") != NULL;
+  if (ph_on)
+    ph0 = PhNow();
   r_frame_count++;
 
   DSDA_ADD_CONTEXT(sf_setup_frame);
@@ -1169,9 +1184,11 @@ void R_RenderPlayerView (player_t* player)
     DSDA_REMOVE_CONTEXT(sf_gl_frustum);
   }
 
+  if (ph_on) { ph1 = PhNow(); ph_t[0] += ph1 - ph0; ph0 = ph1; }
   DSDA_ADD_CONTEXT(sf_bsp_nodes);
   R_RenderBSPNodes();
   DSDA_REMOVE_CONTEXT(sf_bsp_nodes);
+  if (ph_on) { ph1 = PhNow(); ph_t[1] += ph1 - ph0; ph0 = ph1; }
 
   FakeNetUpdate();
 
@@ -1181,6 +1198,7 @@ void R_RenderPlayerView (player_t* player)
     R_DrawPlanes();
     DSDA_REMOVE_CONTEXT(sf_draw_planes);
   }
+  if (ph_on) { ph1 = PhNow(); ph_t[2] += ph1 - ph0; ph0 = ph1; }
 
   DSDA_ADD_CONTEXT(sf_reset_column_buffer);
   R_ResetColumnBuffer();
@@ -1200,6 +1218,16 @@ void R_RenderPlayerView (player_t* player)
     R_DrawMasked ();
     R_ResetColumnBuffer();
     DSDA_REMOVE_CONTEXT(sf_draw_masked);
+  }
+  if (ph_on)
+  {
+    ph1 = PhNow(); ph_t[3] += ph1 - ph0;
+    if (++ph_n >= 120)
+    {
+      lprintf(LO_INFO, "PHASES ms/frame: setup+clear %.2f  bsp+walls %.2f  planes %.2f  portals+masked %.2f\n", ph_t[0] / ph_n, ph_t[1] / ph_n, ph_t[2] / ph_n, ph_t[3] / ph_n);
+      memset(ph_t, 0, sizeof ph_t);
+      ph_n = 0;
+    }
   }
 
   FakeNetUpdate();

@@ -35,6 +35,7 @@
 #include "w_wad.h"
 #include "r_main.h"
 #include "dsda/bglight.h"
+#include "dsda/bgdefer.h"
 #include "dsda/bgvoxel.h"
 #include "r_bsp.h"
 #include "r_segs.h"
@@ -1757,6 +1758,7 @@ void R_DrawMasked(void)
 // The main view also has the halos and the player's weapon; a view through a portal has neither.
 void R_DrawMaskedRange(drawseg_t* dsbase, int vsbase, dboolean main_view)
 {
+  bgd_Flush();      // Begotten: nothing queued may still be missing under the sprites
   int i;
   drawseg_t *ds;
   int cx = SCREENWIDTH / 2;

@@ -34,12 +34,14 @@
  *-----------------------------------------------------------------------------*/
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "doomstat.h"
 #include "w_wad.h"
 #include "r_main.h"
 #include "r_draw.h"
 #include "dsda/bgcolor.h"
+#include "dsda/bgthreads.h"
 #include "v_video.h"
 #include "st_stuff.h"
 #include "g_game.h"
@@ -86,18 +88,20 @@ typedef enum
    COL_FLEXADD
 } columntype_e;
 
-static int    temp_x = 0;
-static int    tempyl[4], tempyh[4];
+// Begotten: the column buffer is per thread (the renderer draws on several threads, see dsda/bgdefer.c)
+static BG_TLS int    temp_x = 0;
+static BG_TLS int    tempyl[4], tempyh[4];
 
 // e6y: resolution limitation is removed
-static pixel_t        *tempbuf;
+static BG_TLS pixel_t        *tempbuf;
+static BG_TLS int    tempbuf_rows;
 
-static int    startx = 0;
-static int    temptype = COL_NONE;
-static int    commontop, commonbot;
-static const pixel_t *temptranmap = NULL;
+static BG_TLS int    startx = 0;
+static BG_TLS int    temptype = COL_NONE;
+static BG_TLS int    commontop, commonbot;
+static BG_TLS const pixel_t *temptranmap = NULL;
 // SoM 7-28-04: Fix the fuzz problem.
-static const pixel_t *tempfuzzmap;
+static BG_TLS const pixel_t *tempfuzzmap;
 
 //
 // Spectre/Invisibility.
@@ -174,9 +178,9 @@ static void R_QuadFlushError(void)
    I_Error("R_FlushQuadColumn called without being initialized.\n");
 }
 
-static void (*R_FlushWholeColumns)(void) = R_FlushWholeError;
-static void (*R_FlushHTColumns)(void)    = R_FlushHTError;
-static void (*R_FlushQuadColumn)(void) = R_QuadFlushError;
+static BG_TLS void (*R_FlushWholeColumns)(void) = R_FlushWholeError;
+static BG_TLS void (*R_FlushHTColumns)(void)    = R_FlushHTError;
+static BG_TLS void (*R_FlushQuadColumn)(void) = R_QuadFlushError;
 
 static void R_FlushColumns(void)
 {
@@ -497,6 +501,18 @@ void R_DrawSpan(draw_span_vars_t *dsvars) {
     *dest++ = colormap[source[spot]];
     count--;
   }
+}
+
+// a drawing thread other than the main one: its own column buffer, sized for the screen as it is now
+void R_ThreadDrawBegin(void)
+{
+  if (tempbuf_rows < SCREENHEIGHT || !tempbuf)
+  {
+    free(tempbuf);
+    tempbuf = (pixel_t*) calloc((size_t) SCREENHEIGHT * 4, sizeof(*tempbuf));
+    tempbuf_rows = SCREENHEIGHT;
+  }
+  temp_x = 0;
 }
 
 void R_InitBuffersRes(void)

@@ -61,6 +61,7 @@
 #include "dsda/mapinfo.h"
 #include "dsda/line_special.h"
 #include "dsda/portal.h"
+#include "smooth.h"
 
 #include "heretic/def.h"
 

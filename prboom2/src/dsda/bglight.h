@@ -28,6 +28,12 @@ void bg_LitColumn(R_DrawColumn_f colfunc, draw_column_vars_t* dcvars, fixed_t sc
 R_DrawColumn_f bg_LitMaskedFunc(R_DrawColumn_f real);
 void bg_SetMaskedScale(fixed_t scale);
 
+// the wall state of the seg just begun, as a copy that stays good for the frame (NULL when the seg needs no lighting), and
+// putting it back on another thread (see bgdefer.c)
+const void* bg_WallSnapshot(void);
+void bg_WallRestore(const void* snapshot);
+void bg_WallSnapshotsReset(void);
+
 // Floors and ceilings. SetPlane before the spans of a visplane (height in map units, fixed); LitSpan draws the span
 // in pieces and returns true, or returns false when no light reaches it (the caller then draws it as usual).
 void bg_LightSetPlane(fixed_t height, int lightlevel);

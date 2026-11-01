@@ -60,6 +60,8 @@
 #include "dsda/map_format.h"
 #include "dsda/aim.h"
 #include "dsda/bgvoxel.h"
+#include <SDL_atomic.h>
+#include "dsda/bgthreads.h"
 #include "dsda/bgscale.h"
 #include "dsda/bgclass.h"
 #include "dsda/bglight.h"
@@ -117,6 +119,8 @@ static int bg_StaticIndex(const mobj_t* mo);
 static int bg_PrepStatics(void);   // marks the baked lights near the view; returns how many
 static void bg_WorldLosEnsure(void);
 static void bg_CollectOccluders(void);
+static void bg_FogAlloc(void);
+static double bg_RowFade(int row);
 static dboolean thing_shadows_on = true;   // BGLIGHT `thingshadows off` turns the things' shadows off for the whole wad
 static dboolean bg_ClearPath(double x0, double y0, double z0, double x1, double y1, double z1);
 static void bg_GlowUpdate(void);
@@ -317,8 +321,9 @@ static int sv[BG_MAXSTATIC], num_sv;
 static bg_seglay_t* seglay;
 static int seglay_n;
 static int level_serial, bake_serial = -1;
-static int* line_seen;
-static int line_seen_n, ray_id;
+static BG_TLS unsigned* line_seen;      // (per thread: which lines this thread's ray has already looked at)
+static BG_TLS int line_seen_n;
+static BG_TLS unsigned ray_id;
 static int bake_warnings;
 static dboolean bg_warn_any_format;   // self test only
 
@@ -816,6 +821,15 @@ static void bg_FloodSectors(bg_light_t* L)
   }
 }
 
+// environment switches (test aids) are read once: getenv in a per-ray or per-frame path is slow, above all on Windows
+static int env_nocap = -1, env_noshadow = -1, env_nothingshadow = -1, env_lantern = -1;
+static int bg_EnvOnce(int* cache, const char* name)
+{
+  if (*cache < 0)
+    *cache = getenv(name) != NULL;
+  return *cache;
+}
+
 static dboolean bg_adding_effect;            // set while the lights of projectiles, explosions and puffs are added
 
 // fills in a light (geometry, colour, flicker of this moment) from its definition
@@ -1017,7 +1031,7 @@ static void bg_LimitEffectShadows(void)
       if (dj < di || (dj == di && j < i))
         ++nearer;
     }
-    if (nearer >= BG_EFFECT_SHADOWS && !getenv("BGLIGHT_NOCAP"))      // (BGLIGHT_NOCAP: test aid, the old behaviour)
+    if (nearer >= BG_EFFECT_SHADOWS && !bg_EnvOnce(&env_nocap, "BGLIGHT_NOCAP"))      // (BGLIGHT_NOCAP: test aid, the old behaviour)
       lights[i].shadow = false;
     else
       ++kept;
@@ -1089,12 +1103,12 @@ static void bg_AddDynamicLights(void)
       double ex, ey;
 
       bg_MobjPos(mo, &ex, &ey, &z);
-      if (!getenv("BGLIGHT_NOCAP") && (hypot(ex - bg_Fix(viewx), ey - bg_Fix(viewy)) > BG_EFFECT_REACH || effect_count >= BG_EFFECT_MAX))
+      if (!bg_EnvOnce(&env_nocap, "BGLIGHT_NOCAP") && (hypot(ex - bg_Fix(viewx), ey - bg_Fix(viewy)) > BG_EFFECT_REACH || effect_count >= BG_EFFECT_MAX))
         continue;
       ++effect_count;
     }
     tmp.strength *= fade;
-    tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_effect_shadows) && !getenv("BGLIGHT_NOSHADOW");
+    tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_effect_shadows) && !bg_EnvOnce(&env_noshadow, "BGLIGHT_NOSHADOW");
     bg_MobjPos(mo, &x, &y, &z);
     if (d == &dyn_puff)
     {
@@ -1123,7 +1137,7 @@ static void bg_AddDynamicLights(void)
     bg_MobjPos(pm, &x, &y, &z);
     a = (double) pm->angle * (2.0 * M_PI / 4294967296.0);
     tmp = dyn_muzzle;
-    tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_effect_shadows) && !getenv("BGLIGHT_NOSHADOW");
+    tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_effect_shadows) && !bg_EnvOnce(&env_noshadow, "BGLIGHT_NOSHADOW");
     mx = x + 28.0 * cos(a);
     my = y + 28.0 * sin(a);
     if (tmp.shadow && !bg_ClearPath(x, y, z + 40.0, mx, my, z + 40.0))
@@ -1179,7 +1193,7 @@ static void bg_AddDynamicLights(void)
       A->valid = true;
       a = A->yaw;
       tmp = dyn_flashlight;
-      tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_flashlight_shadows) && !getenv("BGLIGHT_NOSHADOW");   // (the env switch is for tests)
+      tmp.shadow = tmp.shadow && dsda_IntConfig(dsda_config_begotten_flashlight_shadows) && !bg_EnvOnce(&env_noshadow, "BGLIGHT_NOSHADOW");   // (the env switch is for tests)
       tmp.pitch = BG_FLASHLIGHT_PITCH_SIGN * A->pitch * (180.0 / M_PI);
     }
     {
@@ -1210,6 +1224,8 @@ void bg_LightsBeginFrame(void)
   thinker_t* th;
   int i;
 
+  bg_WallSnapshotsReset();
+  bg_RowFade(1);                  // (worked out now, not by the threads)
   frame_active = false;
   fog_on = false;
   num_lights = 0;
@@ -1308,7 +1324,7 @@ void bg_LightsBeginFrame(void)
 
   bg_AddDynamicLights();
 
-  if (dsda_IntConfig(dsda_config_begotten_lantern) && !getenv("BGLIGHT_NOLANTERN"))   // (the env switch is for tests and screenshots)
+  if (dsda_IntConfig(dsda_config_begotten_lantern) && !bg_EnvOnce(&env_lantern, "BGLIGHT_NOLANTERN"))   // (the env switch is for tests and screenshots)
     for (i = 0; i < MAX_MAXPLAYERS; ++i)
     {
       double x, y, z;
@@ -1346,6 +1362,8 @@ void bg_LightsBeginFrame(void)
   frame_active = num_lights > 0 || i > 0 || fog_on || glow_any;
   if (frame_active)
     bg_CheckTintCache();
+  if (fog_on)
+    bg_FogAlloc();
   if (fog_count > BG_FOG_SLOTS * 3 / 4)
     bg_FogCacheClear();
   if (fog_on)
@@ -1833,7 +1851,13 @@ static const lighttable_t* bg_TintTable(int tint, int mq, int row)   // tint = c
 {
   pixel_t** slot = &tint_cache[tint][mq][row];
 
-  if (!*slot)
+  pixel_t* have = (pixel_t*) SDL_AtomicGetPtr((void**) slot);
+
+  if (have)
+    return have;
+  bgt_Lock();
+  have = (pixel_t*) SDL_AtomicGetPtr((void**) slot);
+  if (!have)
   {
     const byte* pal = cache_pal;
     pixel_t* t = malloc(BG_NUMCOLORS * sizeof(pixel_t));
@@ -1857,9 +1881,11 @@ static const lighttable_t* bg_TintTable(int tint, int mq, int row)   // tint = c
       }
       t[i] = BG_CUBE_AT(out[0], out[1], out[2]);
     }
-    *slot = t;
+    SDL_AtomicSetPtr((void**) slot, t);
+    have = t;
   }
-  return *slot;
+  bgt_Unlock();
+  return have;
 }
 
 // a "key" says which brightness a run is drawn with: the final row, and for a tinted light also which tint at how
@@ -2116,7 +2142,7 @@ static dboolean bg_Los(const bg_los_t* g, double lx, double ly, double lz, doubl
   if (line_seen_n != numlines)
   {
     free(line_seen);
-    line_seen = calloc(numlines + 1, sizeof(int));
+    line_seen = calloc(numlines + 1, sizeof(*line_seen));
     line_seen_n = numlines;
     ray_id = 0;
   }
@@ -2127,7 +2153,11 @@ static dboolean bg_Los(const bg_los_t* g, double lx, double ly, double lz, doubl
         return false;
     return true;
   }
-  ++ray_id;
+  if (++ray_id == 0)
+  {
+    memset(line_seen, 0, (numlines + 1) * sizeof(*line_seen));
+    ray_id = 1;
+  }
   ix = (int) floor((lx - g->x0) / BG_LOS_CELL);
   iy = (int) floor((ly - g->y0) / BG_LOS_CELL);
   ex = (int) floor((tx - g->x0) / BG_LOS_CELL);
@@ -2209,26 +2239,26 @@ typedef struct
   double rcap;                 // the capsule's radius: the thing's, or the picture's if that is narrower
   const mobj_t* mo;
   dboolean sprite;             // casts the shadow of its picture (not a model)
-  dboolean haspic;             // (set by bg_RevolveBlocks) the picture was found, so the capsule is not wanted
   double zfoot;                // the height the picture's top offset is measured from
-  double clx[2], cly[2];       // the picture shown to the last two light places
-  const rpatch_t* cpatch[2];
-  dboolean cflip[2], cache_ok[2];
-  int cnext;
 } bg_occ_t;
 static bg_occ_t occ[BG_MAXOCC];
 static int num_occ;
 static dboolean bg_capsule_only;   // (test aid) BGLIGHT_CAPSULE: the old capsule shadows, to compare speed
 
 static const rpatch_t* bg_SpriteFor(const mobj_t* mo, double lx, double ly, dboolean* flipped);
+static void bg_TouchSprite(const mobj_t* mo);
 
 static void bg_CollectOccluders(void)
 {
   thinker_t* th;
 
   num_occ = 0;
-  bg_capsule_only = getenv("BGLIGHT_CAPSULE") != NULL;
-  if (!thing_shadows_on || !dsda_IntConfig(dsda_config_begotten_thing_shadows) || getenv("BGLIGHT_NOTHINGSHADOW"))   // (the env switch is for tests)
+  {
+    static int env_capsule = -1;
+
+    bg_capsule_only = bg_EnvOnce(&env_capsule, "BGLIGHT_CAPSULE");
+  }
+  if (!thing_shadows_on || !dsda_IntConfig(dsda_config_begotten_thing_shadows) || bg_EnvOnce(&env_nothingshadow, "BGLIGHT_NOTHINGSHADOW"))   // (the env switch is for tests)
     return;
   for (th = thinkercap.next; th != &thinkercap && num_occ < BG_MAXOCC; th = th->next)
   {
@@ -2261,8 +2291,7 @@ static void bg_CollectOccluders(void)
     occ[num_occ].sprite = !bgvox_IsModel(mo);   // a model keeps the capsule
     occ[num_occ].zfoot = bg_Fix(mo->z);
     occ[num_occ].rcap = r;
-    occ[num_occ].cache_ok[0] = occ[num_occ].cache_ok[1] = false;
-    occ[num_occ].cnext = 0;
+    bg_TouchSprite(mo);          // the pictures are made now, so that the drawing threads only read them
     ++num_occ;
   }
 }
@@ -2307,30 +2336,56 @@ static const rpatch_t* bg_SpriteFor(const mobj_t* mo, double lx, double ly, dboo
   return R_PatchByNum(lump + firstspritelump);
 }
 
+// the picture shown to a light place, looked up once per light place and frame (per thread: the drawing threads ask too)
+static BG_TLS struct { int frame; double lx, ly; const rpatch_t* patch; dboolean flip; } occ_tl[BG_MAXOCC][2];
+static BG_TLS int occ_tl_next[BG_MAXOCC];
+
+// makes every picture a thing can show to a light, so that nothing is made while the threads draw
+static void bg_TouchSprite(const mobj_t* mo)
+{
+  int bgsprite = mo->sprite, bgframe = mo->frame, r;
+  const spritedef_t* sprdef;
+  const spriteframe_t* sprframe;
+
+  if (mo->player)
+  {
+    if (!bg_PlayerPose(mo, &bgsprite, &bgframe))
+      bgsprite = bg_ClassSprite(mo->player->bgclass, mo->sprite, mo->frame);
+  }
+  if ((unsigned) bgsprite >= (unsigned) num_sprites)
+    return;
+  sprdef = &sprites[bgsprite];
+  if (!sprdef->spriteframes || (bgframe & FF_FRAMEMASK) >= sprdef->numframes)
+    return;
+  sprframe = &sprdef->spriteframes[bgframe & FF_FRAMEMASK];
+  for (r = 0; r < (sprframe->rotate ? 8 : 1); ++r)
+    R_PatchByNum(sprframe->lump[r] + firstspritelump);
+}
+
 static const rpatch_t* bg_OccPatch(bg_occ_t* o, double lx, double ly, dboolean* flip)
 {
-  int i;
+  int n = (int) (o - occ), i;
 
   for (i = 0; i < 2; ++i)
-    if (o->cache_ok[i] && o->clx[i] == lx && o->cly[i] == ly)
+    if (occ_tl[n][i].frame == frame_id && occ_tl[n][i].lx == lx && occ_tl[n][i].ly == ly)
     {
-      *flip = o->cflip[i];
-      return o->cpatch[i];
+      *flip = occ_tl[n][i].flip;
+      return occ_tl[n][i].patch;
     }
-  i = o->cnext;
-  o->cnext ^= 1;
-  o->cache_ok[i] = true;
-  o->clx[i] = lx;
-  o->cly[i] = ly;
-  o->cpatch[i] = bg_SpriteFor(o->mo, lx, ly, &o->cflip[i]);
-  *flip = o->cflip[i];
-  return o->cpatch[i];
+  i = occ_tl_next[n];
+  occ_tl_next[n] ^= 1;
+  occ_tl[n][i].frame = frame_id;
+  occ_tl[n][i].lx = lx;
+  occ_tl[n][i].ly = ly;
+  occ_tl[n][i].patch = bg_SpriteFor(o->mo, lx, ly, &occ_tl[n][i].flip);
+  *flip = occ_tl[n][i].flip;
+  return occ_tl[n][i].patch;
 }
 
 // how far from the picture's centre line its opaque pixels reach in each row (picture pixels; 0 = the row is empty).
 // Worked out once per picture. A light almost overhead has no side to look at: the thing is then seen as the solid that
 // turns this profile round, which is steady as the light moves and about as wide as the picture really is.
-#define BG_MAXPROFILES 96
+#define BG_MAXPROFILES 1024
 static struct { const rpatch_t* patch; short* half; } profiles[BG_MAXPROFILES];
 static int num_profiles;
 
@@ -2341,9 +2396,13 @@ static const short* bg_RowHalfWidths(const rpatch_t* patch)
   int* lo;
   int* hi;
 
+  bgt_Lock();
   for (i = 0; i < num_profiles; ++i)
     if (profiles[i].patch == patch)
+    {
+      bgt_Unlock();
       return profiles[i].half;
+    }
   if (num_profiles >= BG_MAXPROFILES)
     num_profiles = 0;                       // (a cache: start again, leaking nothing since we free below)
   if (profiles[num_profiles].half)
@@ -2379,7 +2438,9 @@ static const short* bg_RowHalfWidths(const rpatch_t* patch)
   free(hi);
   profiles[num_profiles].patch = patch;
   profiles[num_profiles].half = half;
-  return profiles[num_profiles++].half;
+  half = profiles[num_profiles++].half;
+  bgt_Unlock();
+  return half;
 }
 
 // the picture's opaque test for the point (u, z) on the plane through the thing's centre that faces the light: u is the
@@ -2414,7 +2475,7 @@ static dboolean bg_SpriteSolidAt(bg_occ_t* o, double lx, double ly, double u, do
 // does a thing stand between the light and the target? (a thing the light is inside, or the target is on, never does)
 // the shadow of a thing seen by a light that is nearly overhead: the picture's profile turned round the thing's axis.
 // The ray is followed through the cylinder that holds the picture, in steps that are a pixel or so long.
-static dboolean bg_RevolveBlocks(bg_occ_t* o, double lx, double ly, double lz, double rx, double ry, double tz, double a)
+static dboolean bg_RevolveBlocks(bg_occ_t* o, double lx, double ly, double lz, double rx, double ry, double tz, double a, dboolean* haspic)
 {
   dboolean flip;
   const rpatch_t* patch = bg_OccPatch(o, lx, ly, &flip);
@@ -2422,10 +2483,10 @@ static dboolean bg_RevolveBlocks(bg_occ_t* o, double lx, double ly, double lz, d
   double s = bg_Fix(bg_scale_sprites), rmax, dx = lx - o->x, dy = ly - o->y, b, c, disc, sq, t1, t2, dt;
   int n, k;
 
-  o->haspic = false;
+  *haspic = false;
   if (!patch || patch->width <= 0 || patch->height <= 0)
     return false;
-  o->haspic = true;
+  *haspic = true;
   rmax = (patch->leftoffset > patch->width - patch->leftoffset ? patch->leftoffset : patch->width - patch->leftoffset) / s;
   b = 2.0 * (dx * rx + dy * ry);
   c = dx * dx + dy * dy - rmax * rmax;
@@ -2496,9 +2557,9 @@ static dboolean bg_ThingBlocks(double lx, double ly, double lz, double tx, doubl
           continue;
         }
       }
-      else if (bg_RevolveBlocks(o, lx, ly, lz, rx, ry, tz, a))
+      else if (bg_RevolveBlocks(o, lx, ly, lz, rx, ry, tz, a, &have))
         return true;
-      else if (o->haspic)
+      else if (have)
         continue;
     }
     b = 2.0 * (dx * rx + dy * ry);
@@ -2541,7 +2602,7 @@ static dboolean bg_ShadowLit(const bg_light_t* L, double px, double py, double p
   }
   if (!bg_Los(&world_los, L->a[0], L->a[1], L->a[2], tx, ty, tz))
     return false;
-  return num_occ == 0 || (L->effect && !getenv("BGLIGHT_NOCAP")) || !bg_ThingBlocks(L->a[0], L->a[1], L->a[2], tx, ty, tz);
+  return num_occ == 0 || (L->effect && !bg_EnvOnce(&env_nocap, "BGLIGHT_NOCAP")) || !bg_ThingBlocks(L->a[0], L->a[1], L->a[2], tx, ty, tz);
 }
 
 // the spilled light of a sector does not go where its light cannot: a point in the shadow of a wall, a ledge or a pillar
@@ -3512,6 +3573,16 @@ static double bg_Bayer(int x, int y)
 
 // the fogged colormaps made so far, by key; made when first needed, emptied between frames when it fills up (a pointer
 // handed out stays good for the whole frame)
+static void bg_FogAlloc(void)
+{
+  if (fog_hkey)
+    return;
+  fog_hkey = calloc(BG_FOG_HASH, sizeof *fog_hkey);
+  fog_hidx = calloc(BG_FOG_HASH, sizeof *fog_hidx);
+  fog_pool = malloc((size_t) BG_FOG_SLOTS * BG_NUMCOLORS * sizeof(pixel_t));
+  fog_count = 0;
+}
+
 static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
 {
   unsigned h;
@@ -3523,21 +3594,34 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
   if (!pal || !nearest_cube)
     return base;
   if (!fog_hkey)
-  {
-    fog_hkey = calloc(BG_FOG_HASH, sizeof *fog_hkey);
-    fog_hidx = calloc(BG_FOG_HASH, sizeof *fog_hidx);
-    fog_pool = malloc((size_t) BG_FOG_SLOTS * BG_NUMCOLORS * sizeof(pixel_t));
-    fog_count = 0;
-  }
+    return base;                    // (made at the start of the frame, see bg_FogAlloc)
   h = (unsigned) ((key * 0x9E3779B97F4A7C15ULL) >> 51) & (BG_FOG_HASH - 1);
   while (fog_hkey[h])
   {
     if (fog_hkey[h] == key)
+    {
+      SDL_MemoryBarrierAcquire();
       return fog_pool[fog_hidx[h]];
+    }
+    h = (h + 1) & (BG_FOG_HASH - 1);
+  }
+  // not made yet: under the lock (another thread may have made it meanwhile)
+  bgt_Lock();
+  h = (unsigned) ((key * 0x9E3779B97F4A7C15ULL) >> 51) & (BG_FOG_HASH - 1);
+  while (fog_hkey[h])
+  {
+    if (fog_hkey[h] == key)
+    {
+      bgt_Unlock();
+      return fog_pool[fog_hidx[h]];
+    }
     h = (h + 1) & (BG_FOG_HASH - 1);
   }
   if (fog_count >= BG_FOG_SLOTS)
+  {
+    bgt_Unlock();
     return base;                    // full: no fog for the rest of this frame
+  }
   f = (double) ((key >> 18) & 15) / (double) BG_FOG_STEPS;
   {
     const double* zc = fogz[(key >> 32) & 15].col;
@@ -3568,8 +3652,10 @@ static const lighttable_t* bg_FogTable(bg_key_t key, const lighttable_t* base)
 
     t[i] = BG_CUBE_AT(r < 0 ? 0 : r > 255 ? 255 : r, g < 0 ? 0 : g > 255 ? 255 : g, b < 0 ? 0 : b > 255 ? 255 : b);
   }
-  fog_hkey[h] = key;
   fog_hidx[h] = (short) fog_count++;
+  SDL_MemoryBarrierRelease();       // the table and its index are in place before the key shows them
+  fog_hkey[h] = key;
+  bgt_Unlock();
   return t;
 }
 
@@ -3589,7 +3675,7 @@ static const lighttable_t* bg_KeyColormap(bg_key_t key)
 // Walls
 //
 
-static struct
+typedef struct
 {
   const seg_t* seg;
   int sector;
@@ -3599,7 +3685,44 @@ static struct
   int count;
   int set[BG_MAXLIGHTS];
   double glow, gcol[3];             // the spilled light of its sector (0 = none)
-} wall;
+} bg_wall_t;
+
+static BG_TLS bg_wall_t wall;      // (per thread: the renderer's threads each light the walls they were given)
+
+// a copy of the wall state of the seg just begun, kept for the frame, for the drawing threads (bgdefer.c)
+#define BG_WALLPOOL_BLOCK 256
+static bg_wall_t** wall_blocks;
+static int wall_nblocks, wall_used;
+
+const void* bg_WallSnapshot(void)
+{
+  bg_wall_t* w;
+
+  if (wall.count == 0 && !wall.lay && !fog_on && wall.glow <= 0)
+    return NULL;                  // nothing to light: drawn as it is
+  if (wall_used >= wall_nblocks * BG_WALLPOOL_BLOCK)
+  {
+    wall_blocks = (bg_wall_t**) realloc(wall_blocks, (wall_nblocks + 1) * sizeof *wall_blocks);
+    wall_blocks[wall_nblocks++] = (bg_wall_t*) malloc(BG_WALLPOOL_BLOCK * sizeof(bg_wall_t));
+  }
+  w = &wall_blocks[wall_used / BG_WALLPOOL_BLOCK][wall_used % BG_WALLPOOL_BLOCK];
+  ++wall_used;
+  *w = wall;
+  return w;
+}
+
+void bg_WallRestore(const void* snap)
+{
+  if (snap)
+    wall = *(const bg_wall_t*) snap;
+  else
+    wall.count = 0, wall.lay = NULL, wall.glow = 0;
+}
+
+void bg_WallSnapshotsReset(void)
+{
+  wall_used = 0;
+}
 
 dboolean bg_LightBeginSeg(const seg_t* seg, const sector_t* front)
 {
@@ -3929,8 +4052,8 @@ void bg_LitColumn(R_DrawColumn_f colfunc, draw_column_vars_t* d, fixed_t scale)
 }
 
 // masked columns
-static R_DrawColumn_f masked_real;
-static fixed_t masked_scale;
+static BG_TLS R_DrawColumn_f masked_real;
+static BG_TLS fixed_t masked_scale;
 
 static void bg_MaskedLit(draw_column_vars_t* d)
 {
@@ -3952,9 +4075,9 @@ void bg_SetMaskedScale(fixed_t scale)
 // Floors and ceilings
 //
 
-static double plane_z, plane_n[3];
-static fixed_t plane_height;
-static int plane_light;
+static BG_TLS double plane_z, plane_n[3];
+static BG_TLS fixed_t plane_height;
+static BG_TLS int plane_light;
 
 void bg_LightSetPlane(fixed_t height, int lightlevel)
 {

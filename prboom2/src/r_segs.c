@@ -46,6 +46,7 @@
 #include "p_spec.h"
 #include "r_main.h"
 #include "dsda/bglight.h"
+#include "dsda/bgdefer.h"
 #include "dsda/begotten.h"
 #include "r_bsp.h"
 #include "r_segs.h"
@@ -502,6 +503,14 @@ void R_RenderMaskedSegRange(drawseg_t *ds, int x1, int x2)
 
 static int didsolidcol; /* True if at least one column was marked solid */
 
+// a wall column: queued for the drawing threads, or drawn now
+#define BG_WALLCOLUMN() \
+  do { \
+    if (bgd_Active()) bgd_Column(colfunc, &dcvars, rw_scale, bg_wall); \
+    else if (bg_lit) bg_LitColumn(colfunc, &dcvars, rw_scale); \
+    else colfunc(&dcvars); \
+  } while (0)
+
 static void R_RenderSegLoop (void)
 {
   const rpatch_t *tex_patch;
@@ -511,6 +520,7 @@ static void R_RenderSegLoop (void)
   fixed_t specific_texturecolumn = 0;
 
   dboolean bg_lit = bg_weapons && bg_LightBeginSeg(curline, curline->frontsector);
+  const void* bg_wall = (bg_lit && bgd_Active()) ? bg_WallSnapshot() : NULL;   // (queued drawing: the state the threads light it with)
 
   R_SetDefaultDrawColumnVars(&dcvars);
 
@@ -604,7 +614,7 @@ static void R_RenderSegLoop (void)
       if (!fixedcolormap)
         R_ApplyMidLight(curline->sidedef);
       R_ApplyLightColormap(&dcvars, rw_scale);
-      if (bg_lit) bg_LitColumn(colfunc, &dcvars, rw_scale); else colfunc(&dcvars);
+      BG_WALLCOLUMN();
       tex_patch = NULL;
       ceilingclip[rw_x] = viewheight;
       floorclip[rw_x] = -1;
@@ -637,7 +647,7 @@ static void R_RenderSegLoop (void)
           if (!fixedcolormap)
             R_ApplyTopLight(curline->sidedef);
           R_ApplyLightColormap(&dcvars, rw_scale);
-          if (bg_lit) bg_LitColumn(colfunc, &dcvars, rw_scale); else colfunc(&dcvars);
+          BG_WALLCOLUMN();
           tex_patch = NULL;
           ceilingclip[rw_x] = mid;
         }
@@ -675,7 +685,7 @@ static void R_RenderSegLoop (void)
           if (!fixedcolormap)
             R_ApplyBottomLight(curline->sidedef);
           R_ApplyLightColormap(&dcvars, rw_scale);
-          if (bg_lit) bg_LitColumn(colfunc, &dcvars, rw_scale); else colfunc(&dcvars);
+          BG_WALLCOLUMN();
           tex_patch = NULL;
           floorclip[rw_x] = mid;
         }

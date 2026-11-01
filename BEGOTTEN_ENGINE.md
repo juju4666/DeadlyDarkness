@@ -990,3 +990,27 @@ that cast shadows (a ray per lit point per light, plus the things as occluders).
 - the flashlight, the gun flash, power-up glows, placed lamps and gyro lights are unchanged.
 Measured here with a held lightning alt fire (software, 1280x720): 12 fps before, 36 fps after. `BGLIGHT_NOCAP=1` (test
 aid) switches the limits off. The tunables are BG_EFFECT_REACH / BG_EFFECT_MAX / BG_EFFECT_SHADOWS in bglight.c.
+
+## 0.13.0 - the software renderer draws on several threads
+
+Walls and floors/ceilings (with all their lighting, which is where the time goes: about 15 of the 17 ms of a heavy
+frame) are no longer drawn as the BSP walk finds them. Each wall column and each span is queued (dsda/bgdefer.c) and, at the end of
+`R_DrawPlanes` (and before anything is drawn over them: `R_DrawMaskedRange`), drawn on all threads at once. A task is a
+strip of 16 screen columns or a band of 8 rows, handed out one at a time (dsda/bgthreads.c), so a slow strip does not hold
+the others up. Pixels of a wall and of a plane never overlap, so the order does not matter. Sprites, masked textures,
+halos, weather and the weapon are still drawn on the main thread, afterwards.
+
+- Number of threads: setting `begotten_render_threads` in the config file (0 = one per logical processor, up to 8, the
+  default; 1 = everything on the main thread, as before) or the environment variable `BEGOTTEN_THREADS`. Read once at start.
+  The log says `BGTHREADS: n rendering threads`.
+- Result: the 3D view is pixel-for-pixel the same with 1, 2 or 3 threads (compared on the test maps and the stock map). On
+  the 2-core Linux machine here: the wall+plane part of a frame went from 12.1 ms to 7.7 ms (72 -> 104 fps). More cores
+  should give more; this has not been tried on more than 2 cores or on Windows.
+- What had to become per thread (`BG_TLS`, in dsda/bgthreads.h): the column buffer of r_draw.c, the wall and plane state of the
+  lighting, the line-of-sight "already looked at this line" stamps (a shared counter there made the threads fight over one
+  cache line, and gave wrong answers), the pictures-for-occluders cache. The fog and tint colormap caches fill in under a
+  lock; sprite pictures are made on the main thread before the threads start.
+- Rules for code that runs in a task (anything under `bgd_Flush`): no writes to shared state, no `getenv`, no lazy
+  creation of patches or textures. `BEGOTTEN_PHASES=1` prints where the frame's time goes every 120 frames,
+  `BEGOTTEN_THREADSTATS=1` how many tasks each thread took.
+- Also: getenv calls in the lighting hot paths (per ray!) are read once now; the shot-light cap of 0.12.3 had one.

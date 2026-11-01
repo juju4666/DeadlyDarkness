@@ -55,6 +55,7 @@
 #include "w_wad.h"
 #include "r_main.h"
 #include "dsda/bglight.h"
+#include "dsda/bgdefer.h"
 #include "dsda/begotten.h"
 #include "r_draw.h"
 #include "r_things.h"
@@ -241,7 +242,9 @@ static void R_MapPlane(int y, int x1, int x2, draw_span_vars_t *dsvars)
 
   if (V_IsSoftwareMode())
   {
-    if (!(bg_weapons && bg_LitSpan(dsvars)))
+    if (bgd_Active())
+      bgd_Span(dsvars);            // (queued: the drawing threads light and draw it)
+    else if (!(bg_weapons && bg_LitSpan(dsvars)))
       R_DrawSpan(dsvars);
   }
 }
@@ -803,6 +806,7 @@ static void R_DoDrawPlane(visplane_t *pl)
       stop = pl->maxx + 1;
       dsvars.planezlight = zlight[light];
       bg_LightSetPlane(pl->height, pl->lightlevel);
+      bgd_Plane(pl->height, pl->lightlevel);
       pl->top[pl->minx-1] = pl->top[stop] = SHRT_MAX; // dropoff overflow
 
       for (x = pl->minx ; x <= stop ; x++)
@@ -828,4 +832,5 @@ void R_DrawPlanes (void)
 
       R_DoDrawPlane(pl);
     }
+  bgd_Flush();                 // Begotten: the queued walls and planes are drawn now, on all threads
 }

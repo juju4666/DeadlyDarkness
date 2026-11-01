@@ -145,6 +145,7 @@ void R_DrawViewBorder(void);
 // which gets rid of the unnecessary reset of various variables during
 // column drawing.
 void R_ResetColumnBuffer(void);
+void R_ThreadDrawBegin(void);   // Begotten: call on a drawing thread before it draws columns (gives it a column buffer)
 
 void R_SetFuzzPos(int fuzzpos);
 int R_GetFuzzPos();
