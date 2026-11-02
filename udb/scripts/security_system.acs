@@ -1,0 +1,57 @@
+// Security system switch for Begotten (ACS; compile with acc -h or paste into the map's SCRIPTS lump in Ultimate Doom Builder).
+//
+// What it does when the switch is used:
+//   * the sectors tagged SECTOR_RAISE lift their ceiling by RAISE_BY units (a hatch, a shutter, a vent opening up);
+//   * the red flashing lights go out: the sectors tagged SECTOR_ALARM stop strobing and settle on a steady, bright level,
+//     the red light things (Thing ID THING_RED_LIGHTS) are switched off and the white ones (THING_WHITE_LIGHTS) come on.
+//
+// Setting it up in the editor:
+//   1. The switch: a line with a switch texture, action 80 "ACS Execute", script number 2 (first argument), Use, repeatable
+//      off. The script only runs once however often the line is used.
+//   2. The ceilings that open: give those sectors tag 20.
+//   3. The alarm sectors (the ones lit by the flashing red light): give them tag 21. The script makes them strobe by itself
+//      when the map starts (red tint comes from the lights below, not from the sector), so no sector effect is needed.
+//   4. The red flashing lights: any of the lights ("Begotten: Lights", for instance 20201..20208 or the red beacon 20301)
+//      with Thing ID 21.
+//   5. The white lights that replace them: put white lights (for instance the movable lamp 20202) at the same spots with
+//      Thing ID 22. They need no "Dormant" flag: script 1 switches them off when the map starts.
+//   Change the numbers below if they clash with something in your map.
+
+#include "zcommon.acs"
+
+#define SECTOR_RAISE     20
+#define SECTOR_ALARM     21
+#define THING_RED_LIGHTS 21
+#define THING_WHITE_LIGHTS 22
+#define RAISE_BY         96     // map units
+#define RAISE_SPEED      8      // map units per tic
+#define ALARM_BRIGHT     255
+#define ALARM_DIM        96
+#define ALARM_ON         10     // tics
+#define ALARM_OFF        14
+#define NORMAL_LEVEL     210    // light level of the alarm sectors once the alarm is off
+
+int securityOff;
+
+// the map starts with the alarm going
+script 1 OPEN
+{
+    securityOff = 0;
+    Thing_Deactivate(THING_WHITE_LIGHTS);
+    Light_Strobe(SECTOR_ALARM, ALARM_BRIGHT, ALARM_DIM, ALARM_ON, ALARM_OFF);
+}
+
+// the switch
+script 2 (void)
+{
+    if (securityOff)
+        terminate;
+    securityOff = 1;
+
+    Light_Stop(SECTOR_ALARM);
+    Light_ChangeToValue(SECTOR_ALARM, NORMAL_LEVEL);
+    Thing_Deactivate(THING_RED_LIGHTS);
+    Thing_Activate(THING_WHITE_LIGHTS);
+    Ceiling_RaiseByValue(SECTOR_RAISE, RAISE_SPEED, RAISE_BY);
+    Print(s:"Security system deactivated");
+}

@@ -46,3 +46,5 @@ parameters instead of the name of your saved file (a name like map01.wad is the 
   -iwad "C:\path\to\begotten.wad" -file "C:\path\to\begotten-data.wad" "%F" -warp %L -skill 4
 
 (Preferences -> Game Configurations -> Testing; use your own folder.  Keep the quotes round %F.)
+
+scripts/security_system.acs: ACS for a switch that raises ceilings and turns the red flashing alarm lights into steady white ones (setup notes at the top of the file).

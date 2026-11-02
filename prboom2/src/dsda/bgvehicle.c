@@ -589,6 +589,67 @@ static void ram(mobj_t* v, mobj_t* rider, const kind_t* k, fixed_t speed, fixed_
   }
 }
 
+
+// The heavy vehicles (the mecha, the tank) push destroyed vehicles around: a wreck is a solid thing with no health left
+// that nothing can shoot. It is shoved out of the way along the line from the vehicle's centre; when it cannot go (it is
+// pinned against a wall or another wreck) the vehicle rolls over it and it is flattened: no longer solid.
+static mobj_t* plow_v;
+static fixed_t plow_speed;
+static dboolean plow_moved;
+
+static dboolean PIT_Plow(mobj_t* t)
+{
+  fixed_t dx, dy, dist, pen, mx, my;
+
+  if (t == plow_v || t->player || kind_of(t) == K_TURRET || t->health > 0 || !(t->flags & MF_SOLID) ||
+      (t->flags & (MF_SHOOTABLE | MF_CORPSE | MF_NOCLIP | MF_MISSILE | MF_SPECIAL)))
+    return true;
+  if (plow_v->z >= t->z + t->height || t->z >= plow_v->z + plow_v->height)
+    return true;
+  dx = t->x - plow_v->x;
+  dy = t->y - plow_v->y;
+  dist = P_AproxDistance(dx, dy);
+  pen = plow_v->radius + t->radius + plow_speed + 2 * FRACUNIT - dist;
+  if (pen <= 0 || dist == 0)
+    return true;
+  mx = FixedMul(FixedDiv(dx, dist), pen);
+  my = FixedMul(FixedDiv(dy, dist), pen);
+  if (P_TryMove(t, t->x + mx, t->y + my, false))
+  {
+    t->momx = FixedDiv(dx, dist) * (plow_speed >> FRACBITS) / 2;
+    t->momy = FixedDiv(dy, dist) * (plow_speed >> FRACBITS) / 2;
+    plow_moved = true;
+    if (getenv("BEGOTTEN_VEHDEBUG"))
+      fprintf(stderr, "VEH push: type %d to %d %d\n", (int) t->type, t->x >> 16, t->y >> 16);
+  }
+  else
+  {
+    t->flags &= ~MF_SOLID;                         // run over (the wreck's own state would make it solid again: it checks the mark)
+    t->bg_aux = BGVEH_FLATTENED;
+    S_StartMobjSound(t, sfx_oof);
+    if (getenv("BEGOTTEN_VEHDEBUG"))
+      fprintf(stderr, "VEH stomp: type %d flattened at %d %d (vehicle %d %d)\n", (int) t->type, t->x >> 16, t->y >> 16, plow_v->x >> 16, plow_v->y >> 16);
+  }
+  return true;
+}
+
+static void plow(mobj_t* v, fixed_t speed)
+{
+  int xl, xh, yl, yh, x, y;
+  fixed_t reach = v->radius + 96 * FRACUNIT + speed;
+
+  plow_v = v;
+  plow_speed = speed;
+  plow_moved = false;
+  yh = P_GetSafeBlockY(v->y + reach - bmaporgy);
+  yl = P_GetSafeBlockY(v->y - reach - bmaporgy);
+  xh = P_GetSafeBlockX(v->x + reach - bmaporgx);
+  xl = P_GetSafeBlockX(v->x - reach - bmaporgx);
+  for (y = yl; y <= yh; ++y)
+    for (x = xl; x <= xh; ++x)
+      P_BlockThingsIterator(x, y, PIT_Plow);
+}
+
 // the mecha's weapons: a cannon on the primary fire, a rocket on the alt fire
 // the motorcycle's machinegun: infinite, a burst every 3 tics on either fire key. special1 is its crash memory, so
 // the cooldown is in special2
@@ -850,7 +911,10 @@ static void tank_drive(player_t* player, mobj_t* hull, mobj_t* rider)
   hull->momy = vy;
   speed = P_AproxDistance(vx, vy);
   if (ground)
+  {
     ram(hull, rider, k, speed, fc, fs);
+    plow(hull, speed);
+  }
 
   // the driver's view; the turret follows his eyes when nobody is in it
   rider->angle = hull->angle + ((angle_t) newlook << 16);
@@ -925,6 +989,8 @@ void bgveh_A_TankWreck(mobj_t* mo)
   mo->flags |= MF_SOLID;
   if (mo->info)
     mo->height = mo->info->height;
+  if (mo->bg_aux == BGVEH_FLATTENED)
+    mo->flags &= ~MF_SOLID;
 }
 
 dboolean bgveh_Control(player_t* player)
@@ -1057,6 +1123,8 @@ dboolean bgveh_Control(player_t* player)
 
   if (ground)
     ram(v, rider, k, P_AproxDistance(vx, vy), fc, fs);
+  if (ground && kind_of(v) == &kinds[KIND_MECHA])
+    plow(v, P_AproxDistance(vx, vy));
   if (kind_of(v) == &kinds[KIND_MECHA])
     mecha_fire(player, v, rider);
   else if (k->maxside == 0)

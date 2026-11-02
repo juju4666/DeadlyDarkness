@@ -803,6 +803,8 @@ static void A_VoxWreck(mobj_t* mo)
   mo->flags |= MF_SOLID;
   if (mo->info)
     mo->height = mo->info->height;
+  if (mo->bg_aux == BGVEH_FLATTENED)          // a heavy vehicle has rolled over it
+    mo->flags &= ~MF_SOLID;
 }
 
 static int vox_State(int spr, int frame, int tics, actionf_t act)

@@ -1241,12 +1241,12 @@ def main():
             '# Begotten lighting additions for this wad (see LIGHTING.md).\n'
             '# MAP01 (the Gallery of Lights) has a thin cold haze: far walls fade into it, and lights glow in it.\n'
             'fog map MAP01 color 34 40 54 density 0.0018 scatter 0.6\n'
-            '# and a low sun in the sun court: the angle is where the sun is (0 east, 90 north, 250 south-south-west)\n'
+            '# morning sun: the angle is where the sun is (0 east, 90 north, 180 west), so shadows fall west\n'
             '# per-sector fog: the Chamber of Colour (sector tag 5) is thick and violet, the Sun court (tag 6) is clear\n'
             'fog map MAP01 sector 5 color 56 34 74 density 0.0035 scatter 0.5 max 0.85\n'
             'fog map MAP01 sector 6 density 0\n'
             'color sunlight 255 236 200\n'
-            'sun map MAP01 angle 250 elevation 50 color sunlight strength 0.9\n'
+            'sun map MAP01 angle 0 elevation 30 color sunlight strength 0.9\n'
             '# rain falls in the sun court (the only open sky), with thunder about every 12 seconds. For snow: `weather map MAPxx snow`\n'
             'weather map MAP01 rain density 1 wind 3 thunder 12\n')
     write_umapinfo(old, new, nmaps)

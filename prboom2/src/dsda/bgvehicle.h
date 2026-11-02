@@ -58,4 +58,6 @@ void bgveh_TestCmd(player_t* player);
 // text for the status bar ("MOTORCYCLE 120/150  SPEED 84"), false when on foot
 dboolean bgveh_StatusText(const player_t* player, char* buf, size_t len);
 
+#define BGVEH_FLATTENED 0x5701   // mobj bg_aux mark: a wreck a tank or mecha has driven over
+
 #endif
