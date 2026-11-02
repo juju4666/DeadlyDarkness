@@ -1246,7 +1246,7 @@ def main():
             'fog map MAP01 sector 5 color 56 34 74 density 0.0035 scatter 0.5 max 0.85\n'
             'fog map MAP01 sector 6 density 0\n'
             'color sunlight 255 236 200\n'
-            'sun map MAP01 angle 0 elevation 30 color sunlight strength 0.9\n'
+            'sun map MAP01 angle 340 elevation 30 color sunlight strength 0.9\n'
             '# rain falls in the sun court (the only open sky), with thunder about every 12 seconds. For snow: `weather map MAPxx snow`\n'
             'weather map MAP01 rain density 1 wind 3 thunder 12\n')
     write_umapinfo(old, new, nmaps)

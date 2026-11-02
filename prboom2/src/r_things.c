@@ -1366,6 +1366,12 @@ static void R_DrawPSprite (pspdef_t *psp)
     // e6y: original code is restored
     vis->colormap = spritelights[MAXLIGHTSCALE-1];  // local light
 
+  // Begotten: the hands take the same light as the player would on the floor: coloured lights, and the sun's shadows
+  if (bg_weapons && viewplayer && viewplayer->mo && viewplayer->mo->subsector && vis->colormap &&
+      vis->colormap != fixedcolormap && vis->colormap != fullcolormap && vis->colormap != NULL &&
+      !(psp->state->frame & FF_FULLBRIGHT))
+    vis->colormap = bg_LightSprite(vis->colormap, viewx, viewy, viewz, viewplayer->mo->subsector->sector);
+
   // Begotten: the muzzle flash layer is drawn see-through (when the translucency table is on)
   if (bg_weapons && viewplayer && psp_orig == &viewplayer->psprites[ps_flash])
     vis->mobjflags |= g_mf_translucent;
