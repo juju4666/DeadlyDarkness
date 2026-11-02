@@ -27,6 +27,10 @@
 #define XC_NOCLIP 0x10
 #define XC_LOOK   0x20
 #define XC_ALT    0x40 // begotten: alt fire (secondary mode) is held
+#define XC_EXT    0x80 // begotten: one more byte follows (XC2_ flags, then the track values)
+
+#define XC2_TRACKS 0x01 // track_l and track_r follow
+#define XC2_STYLE  0x02 // the tank style key was pressed (toggles wheels / tracks)
 
 #define XC_LOOK_RESET -32768
 
@@ -42,6 +46,8 @@ void dsda_ReadExCmd(ticcmd_t* cmd, const byte** p);
 void dsda_WriteExCmd(char** p, ticcmd_t* cmd);
 void dsda_ResetExCmdQueue(void);
 void dsda_QueueExCmdAlt(void);
+void dsda_QueueExCmdTracks(int l, int r);
+void dsda_QueueExCmdStyle(void);
 void dsda_PopExCmdQueue(ticcmd_t* cmd);
 void dsda_QueueExCmdJump(void);
 void dsda_QueueExCmdLook(short look);

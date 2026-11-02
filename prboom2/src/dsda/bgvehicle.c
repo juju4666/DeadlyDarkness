@@ -34,7 +34,7 @@
 extern fixed_t bulletslope;
 void P_BulletSlope(mobj_t* mo);
 
-enum { KIND_NONE, KIND_MOTO, KIND_MECHA, KIND_COUNT };
+enum { KIND_NONE, KIND_MOTO, KIND_MECHA, KIND_TANK, KIND_TURRET, KIND_COUNT };
 
 typedef struct
 {
@@ -61,7 +61,16 @@ static const kind_t kinds[KIND_COUNT] =
   { "MOTORCYCLE", 26, F(30, 0), F(6, 0), 0, F(0, 85), F(3, 0), ((fixed_t) (986 * FRACUNIT / 1000)), F(0, 80), 5, 2, 12, 70 },
   // mecha: slow, heavy, strafes, stops almost at once, turns slowly
   { "MECHA", 84, F(9, 50), F(6, 0), F(6, 50), F(0, 28), F(0, 0), F(0, 0), F(0, 0), 4, 4, 5, 25 },
+  // tank hull (the driver's seat): see tank_drive. Wheels style: heavy car (accel, brake, roll, grip, turn); the
+  // maxside of 0 only means "no strafing"
+  { "TANK", 46, F(7, 50), F(3, 50), 0, F(0, 20), F(0, 45), ((fixed_t) (985 * FRACUNIT / 1000)), F(0, 86), 1, 2, 3, 60 },
+  // tank turret (the gunner's seat): see tank_gun
+  { "TANK GUNNER", 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
+
+#define TANK_DECK 22       // height of the turret ring above the hull's floor, map units
+#define TANK_DRIVER 38     // the driver's eye is this far ahead of the hull's centre
+#define TANK_LOOK 12743    // furthest he can look away from straight ahead (70 degrees, in angleturn units)
 
 static const kind_t* kind_of(const mobj_t* v)
 {
@@ -73,6 +82,27 @@ static const kind_t* kind_of(const mobj_t* v)
 static dboolean is_live(const mobj_t* m)
 {
   return m && m->thinker.function == P_MobjThinker;
+}
+
+static const kind_t* const K_TANK = &kinds[KIND_TANK];
+static const kind_t* const K_TURRET = &kinds[KIND_TURRET];
+
+// the body of a vehicle seat: a tank's turret belongs to its hull; everything else is its own body
+static mobj_t* body_of(mobj_t* v)
+{
+  mobj_t* h;
+
+  if (!v || kind_of(v) != K_TURRET)
+    return v;
+  h = v->target;
+  return (is_live(h) && kind_of(h) == K_TANK) ? h : NULL;
+}
+
+static mobj_t* turret_of(const mobj_t* hull)
+{
+  mobj_t* t = hull->lastenemy;
+
+  return (is_live(t) && kind_of(t) == K_TURRET && t->target == hull) ? t : NULL;
 }
 
 mobj_t* bgveh_VehicleOf(const mobj_t* rider)
@@ -94,20 +124,36 @@ dboolean bgveh_Mounted(const player_t* player)
 
 dboolean bgveh_OwnVehicle(const mobj_t* shooter, const mobj_t* vehicle)
 {
-  return shooter && vehicle && shooter->tracer == vehicle && vehicle->tracer == shooter && shooter->player &&
-         kind_of(vehicle);
+  const mobj_t* sv;
+
+  if (!shooter || !vehicle || !shooter->player || !shooter->tracer)
+    return false;
+  sv = shooter->tracer;
+  if (!is_live(sv) || sv->tracer != shooter || !kind_of(sv))
+    return false;
+  if (sv == vehicle)
+    return true;
+  // the two halves of a tank are one vehicle
+  if (kind_of(sv) == K_TANK && vehicle == sv->lastenemy)
+    return true;
+  if (kind_of(sv) == K_TURRET && vehicle == sv->target)
+    return true;
+  return false;
 }
 
+// the vehicle is not drawn in its rider's view (the gunner sees the hull but not the turret he sits in; the driver
+// sees the whole tank around him)
 dboolean bgveh_HideFromView(const mobj_t* thing, const player_t* viewer)
 {
-  return viewer && viewer->mo && bgveh_OwnVehicle(viewer->mo, thing);
+  return viewer && viewer->mo && bgveh_OwnVehicle(viewer->mo, thing) && kind_of(thing) != K_TANK;
 }
 
 mobj_t* bgveh_Redirect(mobj_t* target)
 {
   mobj_t* v = bgveh_VehicleOf(target);
+  mobj_t* b = body_of(v);
 
-  return v ? v : target;
+  return b ? b : v ? v : target;
 }
 
 // ---------------------------------------------------------------- getting in and out
@@ -120,7 +166,16 @@ static dboolean PIT_FindVehicle(mobj_t* t)
 {
   fixed_t d;
 
-  if (!kind_of(t) || t->health <= 0 || t->tracer || !is_live(t))
+  if (!kind_of(t) || kind_of(t) == K_TURRET || t->health <= 0 || !is_live(t))
+    return true;
+  if (kind_of(t) == K_TANK)
+  {
+    mobj_t* tu = turret_of(t);
+
+    if (t->tracer && (!tu || tu->tracer))
+      return true;                     // both seats are taken
+  }
+  else if (t->tracer)
     return true;
   d = P_AproxDistance(t->x - use_player->mo->x, t->y - use_player->mo->y) - t->radius;
   if (d < 0)
@@ -137,30 +192,74 @@ static dboolean PIT_FindVehicle(mobj_t* t)
   return true;
 }
 
-static void put_rider(mobj_t* rider, const mobj_t* v)
+// where the rider of a seat sits: the driver of a tank is ahead of the hull's centre, everybody else in the middle
+static void seat_pos(mobj_t* seat, const mobj_t* body, fixed_t* x, fixed_t* y)
 {
+  *x = body->x;
+  *y = body->y;
+  if (kind_of(seat) == K_TANK)
+  {
+    *x += TANK_DRIVER * finecosine[body->angle >> ANGLETOFINESHIFT];
+    *y += TANK_DRIVER * finesine[body->angle >> ANGLETOFINESHIFT];
+  }
+}
+
+static void put_rider(mobj_t* rider, mobj_t* seat)
+{
+  mobj_t* body = body_of(seat);
+  fixed_t x, y;
+
+  if (!body)
+    body = seat;
+  seat_pos(seat, body, &x, &y);
   P_UnsetThingPosition(rider);
-  rider->x = v->x;
-  rider->y = v->y;
-  rider->z = v->z;
+  rider->x = x;
+  rider->y = y;
+  rider->z = body->z;
   P_SetThingPosition(rider);
-  rider->floorz = v->floorz;
-  rider->ceilingz = v->ceilingz;
+  rider->floorz = body->floorz;
+  rider->ceilingz = body->ceilingz;
+}
+
+// the seat of a tank to take: the front half of it is the driver's, the back half the gunner's; when that one is
+// taken, the other
+static mobj_t* pick_seat(const player_t* player, mobj_t* body)
+{
+  mobj_t* tu;
+  fixed_t fwd;
+  dboolean driver_free, gunner_free;
+
+  if (kind_of(body) != K_TANK)
+    return body;
+  tu = turret_of(body);
+  fwd = FixedMul(player->mo->x - body->x, finecosine[body->angle >> ANGLETOFINESHIFT]) +
+        FixedMul(player->mo->y - body->y, finesine[body->angle >> ANGLETOFINESHIFT]);
+  driver_free = !body->tracer;
+  gunner_free = tu && !tu->tracer;
+  if (fwd >= 0 && driver_free)
+    return body;
+  if (fwd < 0 && gunner_free)
+    return tu;
+  return driver_free ? body : tu;
 }
 
 static void mount(player_t* player, mobj_t* v)
 {
   mobj_t* rider = player->mo;
   const kind_t* k = kind_of(v);
+  mobj_t* body = body_of(v);
 
+  if (!body)
+    body = v;
   P_SetTarget(&rider->tracer, v);
   P_SetTarget(&v->tracer, rider);
   rider->angle = v->angle;
   rider->flags &= ~(MF_SOLID | MF_SHOOTABLE);
   rider->flags |= MF_NOGRAVITY;
   rider->flags2 |= MF2_DONTDRAW;           // he is inside the vehicle
-  rider->radius = v->radius;
-  rider->height = v->height;
+  // the driver of a tank sits ahead of its centre: a small body, so a wall near the tank does not keep him from following
+  rider->radius = k == K_TANK ? 8 * FRACUNIT : body->radius;
+  rider->height = body->height;
   rider->momx = rider->momy = rider->momz = 0;
   player->momx = player->momy = 0;
   put_rider(rider, v);
@@ -170,7 +269,12 @@ static void mount(player_t* player, mobj_t* v)
   {
     char msg[96];
 
-    snprintf(msg, sizeof msg, "You get on the %s. Use gets off.", k->name);
+    if (k == K_TANK)
+      snprintf(msg, sizeof msg, "You drive the tank. The style key switches wheels and tracks; Use gets out.");
+    else if (k == K_TURRET)
+      snprintf(msg, sizeof msg, "You man the turret: fire is the cannon, alt fire the machine gun. Use gets out.");
+    else
+      snprintf(msg, sizeof msg, "You get on the %s. Use gets off.", k->name);
     dsda_AddPlayerMessage(msg, player);
   }
 }
@@ -178,7 +282,8 @@ static void mount(player_t* player, mobj_t* v)
 static void dismount(player_t* player, dboolean destroyed)
 {
   mobj_t* rider = player->mo;
-  mobj_t* v = bgveh_VehicleOf(rider);
+  mobj_t* seat = bgveh_VehicleOf(rider);
+  mobj_t* v = body_of(seat);              // where he lands
   int i;
   dboolean placed = false;
   fixed_t dist;
@@ -189,9 +294,16 @@ static void dismount(player_t* player, dboolean destroyed)
   rider->radius = rider->info->radius;
   rider->height = rider->info->height;
   P_SetTarget(&rider->tracer, NULL);
-  if (!v)
+  if (!seat)
     return;
-  P_SetTarget(&v->tracer, NULL);
+  P_SetTarget(&seat->tracer, NULL);
+  if (kind_of(seat) == K_TANK)
+  {
+    seat->special1.i = seat->special2.i = 0;      // the tracks stop pulling; the look goes back to the front
+    seat->bg_aux = 0;
+  }
+  if (!v)
+    v = seat;
   dist = v->radius + rider->radius + 4 * FRACUNIT;
   for (i = 0; i < 8 && !placed; ++i)
   {
@@ -205,7 +317,7 @@ static void dismount(player_t* player, dboolean destroyed)
     placed = P_TryMove(rider, x, y, false);
   }
   if (!placed)
-    put_rider(rider, v);
+    put_rider(rider, seat);
   rider->momx = v->momx / 2;
   rider->momy = v->momy / 2;
   if (destroyed)
@@ -242,7 +354,7 @@ dboolean bgveh_Use(player_t* player)
             player->mo->z >> 16, (unsigned) player->mo->angle, use_best ? "found" : "none near");
   if (!use_best)
     return false;
-  mount(player, use_best);
+  mount(player, pick_seat(player, use_best));
   return true;
 }
 
@@ -365,6 +477,276 @@ static void mecha_fire(player_t* player, mobj_t* v, mobj_t* rider)
   }
 }
 
+
+// ---------------------------------------------------------------- the tank
+
+//
+// Two seats. The hull is the vehicle the driver sits in; the turret is a second, bodiless thing that turns on top
+// of it and carries the gunner. The hull finds its turret in `lastenemy` (its `threshold` stays above 0, which keeps
+// the damage code from using that field), the turret finds its hull in `target`. Everything else lives in the hull:
+//   special1 / special2   speed of the left / right track (tracks style), in fixed point map units per tic
+//   bg_aux                how far the driver has looked away from straight ahead (wheels style), angleturn units
+//   pursuecount           the control style, 0 wheels / 1 tracks
+//   movecount, strafecount   tics until the cannon / the machine gun can fire again
+//
+
+#define TANK_TRACKMAX F(7, 0)       // a track's speed at full power, units per tic
+#define TANK_TRACKBASE 300          // distance between the tracks in map units: the heading turns by the speed difference over it
+#define TANK_CANNON 50              // tics between two cannon shots
+#define BAM_PER_RADIAN 683565276LL  // 2^32 / (2 pi)
+
+dboolean bgveh_IsTankDriver(const player_t* player)
+{
+  mobj_t* v = player && player->mo ? bgveh_VehicleOf(player->mo) : NULL;
+
+  return v && kind_of(v) == K_TANK;
+}
+
+dboolean bgveh_WantsTracks(const player_t* player)
+{
+  return bgveh_IsTankDriver(player) && bgveh_VehicleOf(player->mo)->pursuecount == 1;
+}
+
+// one track's speed moves toward what the driver asks for: slowly when it builds up, faster when it lets go,
+// fastest when the track has to change direction (that is what makes a tank turn on the spot)
+static fixed_t track_step(fixed_t t, fixed_t want)
+{
+  fixed_t d = want - t, a;
+
+  if (want == 0)
+    a = F(0, 22);
+  else if (t == 0 || (t > 0) == (want > 0))
+    a = fabsx(want) > fabsx(t) ? F(0, 35) : F(0, 60);
+  else
+    a = F(1, 20);
+  return d > a ? t + a : d < -a ? t - a : want;
+}
+
+static void tank_fire(player_t* player, mobj_t* hull, mobj_t* rider)
+{
+  const ticcmd_t* cmd = &player->cmd;
+  dboolean alt = (cmd->ex.actions & XC_ALT) != 0;
+  fixed_t ox = rider->x, oy = rider->y, oz = rider->z;
+  fixed_t fc = finecosine[rider->angle >> ANGLETOFINESHIFT], fs = finesine[rider->angle >> ANGLETOFINESHIFT];
+  mobj_t* tu = turret_of(hull);
+
+  if (!tu || !(cmd->buttons & BT_ATTACK))
+    return;
+  // from the muzzle, not from the seat
+  rider->x = hull->x + 56 * fc;
+  rider->y = hull->y + 56 * fs;
+  if (alt)
+  {
+    if (hull->strafecount == 0)
+    {
+      int damage = 8 + 4 * (P_Random(pr_gunshot) % 3);
+      int t = P_Random(pr_misfire);
+      angle_t angle = rider->angle + ((t - P_Random(pr_misfire)) << 17);
+
+      hull->strafecount = 3;
+      rider->z = hull->z + 10 * FRACUNIT;
+      P_BulletSlope(rider);
+      P_LineAttack(rider, angle, MISSILERANGE, bulletslope, damage);
+      S_StartMobjSound(tu, sfx_chgun);
+    }
+  }
+  else if (hull->movecount == 0)
+  {
+    hull->movecount = TANK_CANNON;
+    rider->z = hull->z + 2 * FRACUNIT;
+    P_SpawnPlayerMissile(rider, MT_ROCKET);
+    S_StartMobjSound(tu, sfx_rlaunc);
+    // the recoil
+    hull->momx -= fc / 2;
+    hull->momy -= fs / 2;
+    if (getenv("BEGOTTEN_VEHDEBUG"))
+      fprintf(stderr, "VEH cannon fired\n");
+  }
+  rider->x = ox;
+  rider->y = oy;
+  rider->z = oz;
+}
+
+static void tank_drive(player_t* player, mobj_t* hull, mobj_t* rider)
+{
+  const kind_t* k = K_TANK;
+  const ticcmd_t* cmd = &player->cmd;
+  mobj_t* tu = turret_of(hull);
+  dboolean ground = hull->z <= hull->floorz;
+  dboolean tracks;
+  fixed_t vx = hull->momx, vy = hull->momy, vf, vl, fc, fs, speed;
+  long long turn64 = 0;
+  int dturn, look, newlook, fwd, steer;
+  angle_t oldview;
+
+  if ((cmd->ex.actions & XC_EXT) && (cmd->ex.actions2 & XC2_STYLE))
+  {
+    hull->pursuecount ^= 1;
+    hull->special1.i = hull->special2.i = 0;
+    hull->bg_aux = 0;
+    dsda_AddPlayerMessage(hull->pursuecount ? "Tank: tracks" : "Tank: wheels", player);
+  }
+  tracks = hull->pursuecount == 1;
+  if (ground && hull->friction > 0)
+  {
+    vx = FixedDiv(vx, hull->friction);
+    vy = FixedDiv(vy, hull->friction);
+  }
+  oldview = rider->angle;
+  look = hull->bg_aux;
+
+  if (tracks)
+  {
+    int l = 0, r = 0;
+    fixed_t tl, tr;
+
+    if ((cmd->ex.actions & XC_EXT) && (cmd->ex.actions2 & XC2_TRACKS))
+    {
+      l = iclamp(cmd->ex.track_l, -127, 127);
+      r = iclamp(cmd->ex.track_r, -127, 127);
+    }
+    tl = hull->special1.i = track_step(hull->special1.i, FixedMul(TANK_TRACKMAX, l * FRACUNIT / 127));
+    tr = hull->special2.i = track_step(hull->special2.i, FixedMul(TANK_TRACKMAX, r * FRACUNIT / 127));
+    // the left track faster than the right one turns the tank to the right
+    if (ground)
+      turn64 = -((long long) (tl - tr) * BAM_PER_RADIAN) / ((long long) TANK_TRACKBASE * FRACUNIT);
+    newlook = 0;                     // the view stays straight ahead
+  }
+  else
+  {
+    // wheels: it steers like a car, so it needs to be moving to turn; the mouse and the turn keys look around
+    fixed_t along = FixedMul(vx, finecosine[hull->angle >> ANGLETOFINESHIFT]) +
+                    FixedMul(vy, finesine[hull->angle >> ANGLETOFINESHIFT]);
+    fixed_t sfac = F(0, 25) + FixedMul(F(0, 75), FixedDiv(fclamp(fabsx(along), 0, 3 * FRACUNIT), 3 * FRACUNIT));
+
+    steer = iclamp(cmd->sidemove, -50, 50);
+    if (ground)
+    {
+      turn64 = -((long long) steer * (ANG1 * 18 / 10) / 50) * sfac / FRACUNIT;
+      if (along < 0)
+        turn64 = -turn64;
+    }
+    newlook = iclamp(look + cmd->angleturn, -TANK_LOOK, TANK_LOOK);
+  }
+  hull->bg_aux = (short) newlook;
+  dturn = (int) turn64;
+  hull->angle += (angle_t) dturn;
+
+  fc = finecosine[hull->angle >> ANGLETOFINESHIFT];
+  fs = finesine[hull->angle >> ANGLETOFINESHIFT];
+  vf = FixedMul(vx, fc) + FixedMul(vy, fs);        // along the heading
+  vl = FixedMul(vx, fs) - FixedMul(vy, fc);        // to the right of it
+  fwd = iclamp(cmd->forwardmove, -50, 50);
+
+  if (ground)
+  {
+    if (tracks)
+    {
+      // the tracks pull the hull to their mean speed; the hull's own sideways speed dies away slowly, so a tank that
+      // turns at speed slides on in its old direction for a moment
+      fixed_t want = (hull->special1.i + hull->special2.i) / 2;
+
+      vf += FixedMul(want - vf, F(0, 30));
+      vl = FixedMul(vl, F(0, 88));
+    }
+    else
+    {
+      if (fwd > 0)
+        vf = fclamp(vf + FixedMul(k->accel, fwd * FRACUNIT / 50), -k->maxback, k->maxfwd);
+      else if (fwd < 0)
+      {
+        if (vf > 0)
+          vf = vf > FixedMul(k->brake, -fwd * FRACUNIT / 50) ? vf - FixedMul(k->brake, -fwd * FRACUNIT / 50) : 0;
+        else
+          vf = fclamp(vf + FixedMul(k->accel * 6 / 10, fwd * FRACUNIT / 50), -k->maxback, k->maxfwd);
+      }
+      else
+        vf = FixedMul(vf, k->roll);
+      vl = FixedMul(vl, k->grip);
+    }
+    vf = fclamp(vf, -k->maxback, k->maxfwd);
+  }
+  vx = FixedMul(vf, fc) + FixedMul(vl, fs);
+  vy = FixedMul(vf, fs) - FixedMul(vl, fc);
+  hull->momx = vx;
+  hull->momy = vy;
+  speed = P_AproxDistance(vx, vy);
+  if (ground)
+    ram(hull, rider, k, speed, fc, fs);
+
+  // the driver's view; the turret follows his eyes when nobody is in it
+  rider->angle = hull->angle + ((angle_t) newlook << 16);
+  if (tu && !tu->tracer)
+    tu->angle = rider->angle;
+  if (player == &players[displayplayer] && (dturn || newlook != look))
+    R_SmoothPlaying_Add((int) (rider->angle - oldview));
+  // and the weapons are his only when there is no gunner
+  if (tu && !tu->tracer)
+    tank_fire(player, hull, rider);
+}
+
+static void tank_gun(player_t* player, mobj_t* tu, mobj_t* rider)
+{
+  mobj_t* hull = body_of(tu);
+  angle_t turn = (angle_t) ((int) player->cmd.angleturn << 16);
+
+  tu->angle += turn;
+  rider->angle = tu->angle;
+  if (player == &players[displayplayer] && turn)
+    R_SmoothPlaying_Add((int) turn);
+  if (hull)
+    tank_fire(player, hull, rider);
+}
+
+// the hull's thinker (its idle state): make the turret, keep it on the hull, count the guns down
+void bgveh_A_TankThink(mobj_t* hull)
+{
+  mobj_t* tu = turret_of(hull);
+
+  if (!tu)
+  {
+    int type = bgvox_TypeOfKind(KIND_TURRET);
+
+    if (type < 0)
+      return;
+    tu = P_SpawnMobj(hull->x, hull->y, hull->z + TANK_DECK * FRACUNIT, type);
+    P_SetTarget(&tu->target, hull);
+    P_SetTarget(&hull->lastenemy, tu);
+    tu->angle = hull->angle;
+    hull->threshold = 1;                // a thing with a threshold is not made to remember an enemy
+  }
+  if (tu->x != hull->x || tu->y != hull->y)
+  {
+    P_UnsetThingPosition(tu);
+    tu->x = hull->x;
+    tu->y = hull->y;
+    P_SetThingPosition(tu);
+  }
+  tu->z = hull->z + TANK_DECK * FRACUNIT;
+  tu->floorz = hull->floorz;
+  tu->ceilingz = hull->ceilingz;
+  if (hull->movecount > 0)
+    --hull->movecount;
+  if (hull->strafecount > 0)
+    --hull->strafecount;
+}
+
+// the wreck keeps no turret
+void bgveh_A_TankWreck(mobj_t* mo)
+{
+  mobj_t* tu = turret_of(mo);
+
+  if (tu)
+  {
+    P_SetTarget(&mo->lastenemy, NULL);
+    P_RemoveMobj(tu);
+  }
+  mo->flags &= ~(MF_CORPSE | MF_DROPOFF);
+  mo->flags |= MF_SOLID;
+  if (mo->info)
+    mo->height = mo->info->height;
+}
+
 dboolean bgveh_Control(player_t* player)
 {
   mobj_t* rider = player->mo;
@@ -385,6 +767,17 @@ dboolean bgveh_Control(player_t* player)
   rider->flags2 |= MF2_DONTDRAW;
   rider->momx = rider->momy = rider->momz = 0;
   player->momx = player->momy = 0;
+
+  if (k == K_TANK || k == K_TURRET)
+  {
+    if (k == K_TANK)
+      tank_drive(player, v, rider);
+    else
+      tank_gun(player, v, rider);
+    player->attackdown = 0;
+    player->pendingweapon = wp_nochange;
+    return true;
+  }
 
   ground = v->z <= v->floorz;
   // the vehicle's speed: the engine multiplies a thing's momentum by the floor friction after every move
@@ -504,6 +897,8 @@ void bgveh_PostTick(void)
     player_t* player = &players[i];
     mobj_t* rider;
     mobj_t* v;
+    mobj_t* body;
+    fixed_t sx, sy;
 
     if (!playeringame[i] || !player->mo)
       continue;
@@ -519,23 +914,25 @@ void bgveh_PostTick(void)
       }
       continue;
     }
+    body = body_of(v);
     if (player->playerstate != PST_LIVE || rider->health <= 0)
     {
       dismount(player, false);
       continue;
     }
-    if (v->health <= 0)
+    if (!body || body->health <= 0)
     {
       dismount(player, true);
       continue;
     }
     // carry the rider; walking over a line, picking things up and sector effects happen to him as to any player
-    rider->z = v->z;
-    if (!P_TryMove(rider, v->x, v->y, false))
+    seat_pos(v, body, &sx, &sy);
+    rider->z = body->z;
+    if (!P_TryMove(rider, sx, sy, false))
       put_rider(rider, v);
-    rider->z = v->z;
-    rider->floorz = v->floorz;
-    rider->ceilingz = v->ceilingz;
+    rider->z = body->z;
+    rider->floorz = body->floorz;
+    rider->ceilingz = body->ceilingz;
     rider->momx = rider->momy = rider->momz = 0;
   }
 }
@@ -557,77 +954,111 @@ dboolean bgveh_Camera(player_t* player)
   return true;
 }
 
-// developer aid: BEGOTTEN_VEHTEST="20:use 30:fwd=50 90:turn=300 150:fwd=0 160:use" plays player 1's controls by tic (use is
-// one tic; fwd, side, turn (angleturn), fire, alt, jump stay until changed: fire=0 ...) and, with BEGOTTEN_VEHDEBUG=1,
-// prints the player's and the vehicle's state every 10 tics
+// developer aid: BEGOTTEN_VEHTEST="20:use 30:fwd=50 90:turn=300 150:fwd=0 160:use" plays player 1's controls by tic (use and style
+// are one tic; fwd, side, turn (angleturn), fire, alt, jump, tl and tr (the tank's tracks) stay until changed: fire=0 ...);
+// BEGOTTEN_VEHTEST2 does the same for player 2 (with BEGOTTEN_LOCALPLAYERS=2). With BEGOTTEN_VEHDEBUG=1 it prints the
+// player's and the vehicle's state every 10 tics
 void bgveh_TestCmd(player_t* player)
 {
-  static int init, ntok;
-  static struct { int tic; char what[16]; int val; } tok[256];
-  static int next, fwd, side, turn, fire, alt, jump;
+  static struct
+  {
+    int init, ntok, next, fwd, side, turn, fire, alt, jump, tl, tr;
+    struct { int tic; char what[16]; int val; } tok[256];
+  } st[2];
   const char* e;
-  int one_use = 0;
+  int one_use = 0, one_style = 0, n = (int) (player - players);
 
-  if (player != &players[0])
+  if (n < 0 || n > 1)
     return;
-  if (!init)
+  if (!st[n].init)
   {
     char buf[2048], *c;
 
-    init = 1;
-    e = getenv("BEGOTTEN_VEHTEST");
+    st[n].init = 1;
+    e = getenv(n ? "BEGOTTEN_VEHTEST2" : "BEGOTTEN_VEHTEST");
     if (e)
     {
       snprintf(buf, sizeof buf, "%s", e);
-      for (c = strtok(buf, " ,"); c && ntok < 256; c = strtok(NULL, " ,"))
+      for (c = strtok(buf, " ,"); c && st[n].ntok < 256; c = strtok(NULL, " ,"))
       {
         int t, v = 1;
         char w[16];
 
         if (sscanf(c, "%d:%15[a-z]=%d", &t, w, &v) >= 2 || sscanf(c, "%d:%15[a-z]", &t, w) == 2)
         {
-          tok[ntok].tic = t;
-          snprintf(tok[ntok].what, sizeof tok[ntok].what, "%s", w);
-          tok[ntok].val = v;
-          ++ntok;
+          st[n].tok[st[n].ntok].tic = t;
+          snprintf(st[n].tok[st[n].ntok].what, sizeof st[n].tok[0].what, "%s", w);
+          st[n].tok[st[n].ntok].val = v;
+          ++st[n].ntok;
         }
       }
     }
   }
-  if (!ntok)
+  if (!st[n].ntok)
     return;
-  while (next < ntok && tok[next].tic <= leveltime)
+  while (!demoplayback && st[n].next < st[n].ntok && st[n].tok[st[n].next].tic <= leveltime)
   {
-    const char* w = tok[next].what;
-    int v = tok[next].val;
+    const char* w = st[n].tok[st[n].next].what;
+    int v = st[n].tok[st[n].next].val;
 
     if (!strcmp(w, "use")) one_use = 1;
-    else if (!strcmp(w, "fwd")) fwd = v;
-    else if (!strcmp(w, "side")) side = v;
-    else if (!strcmp(w, "turn")) turn = v;
-    else if (!strcmp(w, "fire")) fire = v;
-    else if (!strcmp(w, "alt")) alt = v;
-    else if (!strcmp(w, "jump")) jump = v;
+    else if (!strcmp(w, "style")) one_style = 1;
+    else if (!strcmp(w, "fwd")) st[n].fwd = v;
+    else if (!strcmp(w, "side")) st[n].side = v;
+    else if (!strcmp(w, "turn")) st[n].turn = v;
+    else if (!strcmp(w, "fire")) st[n].fire = v;
+    else if (!strcmp(w, "alt")) st[n].alt = v;
+    else if (!strcmp(w, "jump")) st[n].jump = v;
+    else if (!strcmp(w, "tl")) st[n].tl = v;
+    else if (!strcmp(w, "tr")) st[n].tr = v;
     else if (!strcmp(w, "hurt")) P_DamageMobj(player->mo, NULL, NULL, v);       // a blow at the rider (lands on the vehicle)
-    ++next;
+    ++st[n].next;
   }
-  player->cmd.forwardmove = (signed char) fwd;
-  player->cmd.sidemove = (signed char) side;
-  player->cmd.angleturn = (short) turn;
-  if (fire) player->cmd.buttons |= BT_ATTACK;
+  if (demoplayback)
+    goto debug;                  // a demo plays its own commands; only the printing is wanted
+  player->cmd.forwardmove = (signed char) st[n].fwd;
+  player->cmd.sidemove = (signed char) st[n].side;
+  player->cmd.angleturn = (short) st[n].turn;
+  if (st[n].fire) player->cmd.buttons |= BT_ATTACK;
   if (one_use) player->cmd.buttons |= BT_USE;
   else player->cmd.buttons &= ~BT_USE;
-  player->cmd.ex.actions &= ~(XC_ALT | XC_JUMP);
-  if (alt) player->cmd.ex.actions |= XC_ALT;
-  if (jump) player->cmd.ex.actions |= XC_JUMP;
+  player->cmd.ex.actions &= ~(XC_ALT | XC_JUMP | XC_EXT);
+  player->cmd.ex.actions2 = 0;
+  player->cmd.ex.track_l = player->cmd.ex.track_r = 0;
+  if (st[n].alt) player->cmd.ex.actions |= XC_ALT;
+  if (st[n].jump) player->cmd.ex.actions |= XC_JUMP;
+  if (bgveh_WantsTracks(player) || st[n].tl || st[n].tr)
+  {
+    player->cmd.ex.actions |= XC_EXT;
+    player->cmd.ex.actions2 |= XC2_TRACKS;
+    player->cmd.ex.track_l = (signed char) st[n].tl;
+    player->cmd.ex.track_r = (signed char) st[n].tr;
+  }
+  if (one_style)
+  {
+    player->cmd.ex.actions |= XC_EXT;
+    player->cmd.ex.actions2 |= XC2_STYLE;
+  }
+debug:
   if (getenv("BEGOTTEN_VEHDEBUG") && leveltime % 10 == 0)
   {
     mobj_t* v = bgveh_VehicleOf(player->mo);
 
-    fprintf(stderr, "VEH t=%d rider %d,%d,%d ang %d mounted %d", leveltime, player->mo->x >> 16, player->mo->y >> 16,
-            player->mo->z >> 16, (int) (player->mo->angle / (ANG1 + 0.0)), v ? 1 : 0);
+    fprintf(stderr, "VEH p%d t=%d rider %d,%d,%d ang %d mounted %d", n + 1, leveltime, player->mo->x >> 16,
+            player->mo->y >> 16, player->mo->z >> 16, (int) (player->mo->angle / (ANG1 + 0.0)), v ? 1 : 0);
     if (v)
-      fprintf(stderr, " | veh %d,%d vel %.1f,%.1f hp %d", v->x >> 16, v->y >> 16, v->momx / 65536.0, v->momy / 65536.0, v->health);
+    {
+      mobj_t* b = body_of(v);
+
+      if (!b)
+        b = v;
+      fprintf(stderr, " | veh %d,%d ang %d vel %.1f,%.1f hp %d", b->x >> 16, b->y >> 16, (int) (b->angle / (ANG1 + 0.0)),
+              b->momx / 65536.0, b->momy / 65536.0, b->health);
+      if (kind_of(v) == K_TANK)
+        fprintf(stderr, " tracks %.1f %.1f style %d", v->special1.i / 65536.0, v->special2.i / 65536.0, v->pursuecount);
+      if (kind_of(v) == K_TURRET)
+        fprintf(stderr, " turret ang %d", (int) (v->angle / (ANG1 + 0.0)));
+    }
     fprintf(stderr, "\n");
   }
 }
@@ -641,7 +1072,20 @@ dboolean bgveh_StatusText(const player_t* player, char* buf, size_t len)
   if (!v)
     return false;
   k = kind_of(v);
-  speed = P_AproxDistance(v->momx, v->momy);
-  snprintf(buf, len, "%s %d  SPEED %d", k->name, v->health > 0 ? v->health : 0, (int) ((long long) speed * 394 / 100 >> FRACBITS));
+  {
+    mobj_t* b = body_of(v);
+
+    if (!b)
+      b = v;
+    speed = P_AproxDistance(b->momx, b->momy);
+    if (k == K_TANK)
+      snprintf(buf, len, "TANK %d  SPEED %d  %s", b->health > 0 ? b->health : 0,
+               (int) ((long long) speed * 394 / 100 >> FRACBITS), b->pursuecount ? "TRACKS" : "WHEELS");
+    else if (k == K_TURRET)
+      snprintf(buf, len, "TANK %d  %s", b->health > 0 ? b->health : 0, b->movecount ? "RELOADING" : "CANNON READY");
+    else
+      snprintf(buf, len, "%s %d  SPEED %d", k->name, v->health > 0 ? v->health : 0,
+               (int) ((long long) speed * 394 / 100 >> FRACBITS));
+  }
   return true;
 }

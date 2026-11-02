@@ -207,6 +207,11 @@ typedef enum {
   dsda_input_script_8,
   dsda_input_script_9,
   dsda_input_fps,
+  dsda_input_tank_left_fwd,
+  dsda_input_tank_left_back,
+  dsda_input_tank_right_fwd,
+  dsda_input_tank_right_back,
+  dsda_input_tank_style,
   DSDA_INPUT_IDENTIFIER_COUNT
 } dsda_input_identifier_t;
 

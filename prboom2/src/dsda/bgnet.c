@@ -376,6 +376,9 @@ static void PutCmd(pkt_t* p, const ticcmd_t* c)
   Put8(p, c->ex.save_slot);
   Put8(p, c->ex.load_slot);
   Put16(p, (unsigned short) c->ex.look);
+  Put8(p, c->ex.actions2);
+  Put8(p, (byte) c->ex.track_l);
+  Put8(p, (byte) c->ex.track_r);
 }
 
 static void GetCmd(pkt_t* p, ticcmd_t* c)
@@ -391,6 +394,9 @@ static void GetCmd(pkt_t* p, ticcmd_t* c)
   c->ex.save_slot = (byte) Get8(p);
   c->ex.load_slot = (byte) Get8(p);
   c->ex.look = (short) Get16(p);
+  c->ex.actions2 = (byte) Get8(p);
+  c->ex.track_l = (signed char) Get8(p);
+  c->ex.track_r = (signed char) Get8(p);
   c->ex.save_slot = 0;   // nobody saves or loads another player's game
   c->ex.load_slot = 0;
 }
@@ -1242,6 +1248,9 @@ static void TraceAfterTic(int g)      // tic g has just been run
     hc = (hc ^ c->arti) * 16777619u;
     hc = (hc ^ c->ex.actions) * 16777619u;
     hc = (hc ^ (unsigned) (c->ex.look & 65535)) * 16777619u;
+    hc = (hc ^ c->ex.actions2) * 16777619u;
+    hc = (hc ^ (byte) c->ex.track_l) * 16777619u;
+    hc = (hc ^ (byte) c->ex.track_r) * 16777619u;
     if (players[p].mo)
     {
       hp = (hp ^ (unsigned) players[p].mo->x) * 16777619u;
@@ -3469,6 +3478,12 @@ void dsda_BgNetSelfTest(void)
   NCHECK(!p.bad, "net: a command fits in a packet");
   NCHECK(b.forwardmove == -50 && b.sidemove == 40 && b.angleturn == -1234 && b.buttons == 0x85, "net: move fields survive");
   NCHECK(b.lookfly == 3 && b.arti == 7 && b.ex.actions == 0x40 && b.ex.look == -300, "net: extra fields survive");
+  a.ex.actions = 0x80; a.ex.actions2 = 3; a.ex.track_l = -100; a.ex.track_r = 127;
+  PutInit(&p, PKT_TICS);
+  PutCmd(&p, &a);
+  p.pos = 4;
+  GetCmd(&p, &b);
+  NCHECK(!p.bad && b.ex.actions2 == 3 && b.ex.track_l == -100 && b.ex.track_r == 127, "net: the tank's track values survive");
   NCHECK(b.ex.save_slot == 0, "net: save slots do not cross the network");
 
   p.pos = p.len;

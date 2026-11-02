@@ -30,6 +30,7 @@ def build():
         out.append('thing { x = %d.0; y = %d.0; angle = %d; type = %d; skill1 = true; skill2 = true; skill3 = true; skill4 = true; '
                    'skill5 = true; single = true; coop = true; dm = true; class1 = true; class2 = true; class3 = true; }' % (x, y, a, t))
     thing(1, int(os.environ.get('PX', 256)), int(os.environ.get('PY', 1024)), int(os.environ.get('PANG', 0)))
+    thing(2, int(os.environ.get('PX', 256)), int(os.environ.get('PY', 1024)) + 60, int(os.environ.get('PANG', 0)))
     thing(21201, 400, 900, 0)
     thing(21202, 400, 1200, 0)
     for k in range(6): thing(3001, 1500, 300 + 250 * k, 180)

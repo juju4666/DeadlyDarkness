@@ -597,6 +597,12 @@ cfg_input_def_t input_defs[] = {
   INPUT_SETTING("input_script_7", dsda_input_script_7, 0, -1, -1),
   INPUT_SETTING("input_script_8", dsda_input_script_8, 0, -1, -1),
   INPUT_SETTING("input_script_9", dsda_input_script_9, 0, -1, -1),
+  // Begotten: the tank's two tracks (see dsda/bgvehicle.c)
+  INPUT_SETTING("input_tank_left_fwd", dsda_input_tank_left_fwd, 'w', -1, -1),
+  INPUT_SETTING("input_tank_left_back", dsda_input_tank_left_back, 's', -1, -1),
+  INPUT_SETTING("input_tank_right_fwd", dsda_input_tank_right_fwd, KEYD_UPARROW, -1, -1),
+  INPUT_SETTING("input_tank_right_back", dsda_input_tank_right_back, KEYD_DOWNARROW, -1, -1),
+  INPUT_SETTING("input_tank_style", dsda_input_tank_style, 'c', -1, DSDA_CONTROLLER_BUTTON_Y),
 };
 
 static int input_def_count = sizeof(input_defs) / sizeof(input_defs[0]);

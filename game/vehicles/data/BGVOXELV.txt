@@ -11,3 +11,12 @@ model mecha A VXMECH
 model mecha B VXMECHB light 420 1.0  1.0 0.55 0.2
 model mecha C VXMECHC light 320 0.85 1.0 0.5  0.15
 model mecha D VXMECHD light 320 0.8  1.0 0.55 0.2
+# Tank (0.15.0): two seats. The hull is `vehicle tank` (driver); it makes its own turret, a bodiless `vehicle turret`
+# prop that turns on top of it (gunner). Wheels style drives like a heavy car; tracks style has one key per track.
+prop  tank  21203 sprite VTNK radius 40 height 48  health 900 mass 5000 vehicle tank
+model tank  A VXTANK
+model tank  B VXTANKB light 500 1.0  1.0 0.55 0.2
+model tank  C VXTANKC light 360 0.85 1.0 0.5  0.15
+model tank  D VXTANKD light 360 0.8  1.0 0.55 0.2
+prop  tankturret 21204 sprite VTUR radius 24 height 20 health 1 mass 1 vehicle turret
+model tankturret A VXTURR

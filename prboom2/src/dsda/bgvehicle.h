@@ -40,6 +40,14 @@ dboolean bgveh_OwnVehicle(const mobj_t* shooter, const mobj_t* vehicle);
 // the vehicle is not drawn in its rider's own view
 dboolean bgveh_HideFromView(const mobj_t* thing, const player_t* viewer);
 
+// the tank: the driver of one, and whether it is in the "tracks" style (the two tracks replace the movement keys)
+dboolean bgveh_IsTankDriver(const player_t* player);
+dboolean bgveh_WantsTracks(const player_t* player);
+
+// the tank hull's state actions (see bgvoxel.c)
+void bgveh_A_TankThink(mobj_t* hull);
+void bgveh_A_TankWreck(mobj_t* wreck);
+
 // developer aid (BEGOTTEN_VEHTEST): plays player 1's controls from a script
 void bgveh_TestCmd(player_t* player);
 

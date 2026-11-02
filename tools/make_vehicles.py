@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-make_vehicles.py - makes the placeholder vehicle models (a motorcycle and a mecha), each with an idle model, an
+make_vehicles.py - makes the placeholder vehicle models (a motorcycle, a mecha and a tank), each with an idle model, an
 explosion and two burning-wreck frames, as MagicaVoxel .vox files, their BGVOXEL definition and editor icons.
 
     python make_vehicles.py OUTDIR
@@ -142,6 +142,65 @@ def mech():
     return c
 
 
+def tank():
+    """the hull: 260 cells (104 units) long, 190 wide, the deck 58 cells (23 units) up. x is forward."""
+    c = Canvas(260, 190, 100)
+    for s in (-1, 1):
+        y0, y1 = (min(s * 58, s * 92), max(s * 58, s * 92))
+        o0, o1 = (min(s * 86, s * 92), max(s * 86, s * 92))
+        c.box(-104, 104, y0, y1, 0, 36, 12)                          # the track belt, rounded at the ends
+        c.wheel(104, 18, 18, y0, y1, 12, 12)
+        c.wheel(-104, 18, 18, y0, y1, 12, 12)
+        for x in (-80, -48, -16, 16, 48, 80):                        # road wheels
+            c.wheel(x, 17, 14, o0, o1, 16, 15)
+        c.wheel(112, 21, 18, o0, o1, 16, 15)                         # sprocket and idler
+        c.wheel(-112, 21, 18, o0, o1, 16, 15)
+        c.box(-122, 122, y0 - (2 if s > 0 else -2), y1, 38, 44, 13)  # fender over the track
+        c.box(-122, 122, min(s * 90, s * 94), max(s * 90, s * 94), 44, 48, 13)
+        for x in (-90, -30, 30, 90):                                 # stowage on the fender
+            c.box(x - 12, x + 12, min(s * 66, s * 84), max(s * 66, s * 84), 44, 54, 16)
+    # hull body and the sloped front
+    c.box(-100, 100, -58, 58, 18, 56, 13)
+    for i in range(36):
+        c.box(100 + i, 100 + i, -58, 58, 18, 56 - int(i * 0.9), 13)
+    c.box(98, 112, -56, 56, 44, 47, 14)                              # stripe on the glacis
+    c.box(-122, -100, -50, 50, 18, 50, 13)
+    for i in range(12):
+        c.box(-122 - i, -122 - i, -50, 50, 18, 50 - i * 2, 13)
+    # engine deck with vents
+    c.box(-100, -28, -52, 52, 56, 60, 16)
+    for x in (-92, -76, -60, -44):
+        c.box(x, x + 8, -40, 40, 60, 61, 4)
+    # turret ring and the driver's hatch
+    c.ball(0, 0, 56, 56, 56, 5, 16)
+    c.box(70, 104, -24, 24, 56, 66, 13)
+    c.box(102, 106, -18, 18, 58, 63, 3)
+    c.box(70, 76, -24, 24, 66, 69, 16)
+    # lights and a tow hook
+    for s in (-1, 1):
+        c.box(112, 116, min(s * 40, s * 48), max(s * 40, s * 48), 40, 46, 244)
+        c.box(-124, -121, min(s * 40, s * 48), max(s * 40, s * 48), 36, 40, 243)
+    c.box(110, 118, -6, 6, 20, 26, 16)
+    return c
+
+
+def turret():
+    """the turret, centred on its ring: 320 cells long so the barrel (to 150 cells = 60 units) fits"""
+    c = Canvas(320, 120, 70)
+    c.ball(0, 0, 0, 62, 52, 40, 13)                                  # rounded body
+    c.box(-70, -50, -34, 34, 0, 34, 13)                              # bustle at the back
+    c.box(-72, -56, -26, 26, 24, 30, 16)
+    c.box(40, 66, -24, 24, 8, 38, 16)                                # mantlet
+    c.box(66, 150, -5, 5, 20, 30, 16)                                # the barrel
+    c.box(140, 152, -8, 8, 18, 32, 15)                               # muzzle brake
+    c.box(40, 90, 12, 16, 22, 26, 12)                                # coaxial machine gun
+    c.ball(-16, 20, 38, 14, 14, 7, 16)                               # commander's cupola
+    c.box(-22, -10, 14, 26, 42, 44, 3)
+    c.bar((-44, -30, 36), (-60, -34, 66), 1, 12)                     # antenna
+    c.box(0, 6, -50, -46, 14, 28, 14)                                # yellow marking
+    return c
+
+
 def explosion(c, seed, rad, cz):
     rng = np.random.default_rng(seed)
     g = np.zeros_like(c.g)
@@ -217,6 +276,17 @@ def main():
     mvp.L, mvp.W, mvp.H = cc.L, cc.W, cc.H
     mvp.X0, mvp.Y0 = -cc.L // 2, -cc.W // 2
     mvp.icon(base, os.path.join(out, 'sprites', 'props', 'VMCHA0.png'))
+    ct = tank()
+    base = build('VXTANK', ct, 200, 40, out, 40)
+    mvp.L, mvp.W, mvp.H = ct.L, ct.W, ct.H
+    mvp.X0, mvp.Y0 = -ct.L // 2, -ct.W // 2
+    mvp.icon(base, os.path.join(out, 'sprites', 'props', 'VTNKA0.png'))
+    ctu = turret()
+    base = mvp.shell(ctu.g.copy())
+    mvp.L, mvp.W, mvp.H = ctu.L, ctu.W, ctu.H
+    mvp.X0, mvp.Y0 = -ctu.L // 2, -ctu.W // 2
+    mvp.write_vox(os.path.join(out, 'data', 'voxels', 'VXTURR.vox'), base)
+    mvp.icon(base, os.path.join(out, 'sprites', 'props', 'VTURA0.png'))
     with open(os.path.join(out, 'data', 'BGVOXELV.txt'), 'w') as f:
         f.write("""# Vehicles (BEGOTTEN_ENGINE.md, 0.14.0): voxel props with `vehicle moto` or `vehicle mecha`.
 # Get in and out with Use. Motorcycle: throttle, brake, steer with the mouse or turn keys (and the side keys);
@@ -231,6 +301,15 @@ model mecha A VXMECH
 model mecha B VXMECHB light 420 1.0  1.0 0.55 0.2
 model mecha C VXMECHC light 320 0.85 1.0 0.5  0.15
 model mecha D VXMECHD light 320 0.8  1.0 0.55 0.2
+# Tank (0.15.0): two seats. The hull is `vehicle tank` (driver); it makes its own turret, a bodiless `vehicle turret`
+# prop that turns on top of it (gunner). Wheels style drives like a heavy car; tracks style has one key per track.
+prop  tank  21203 sprite VTNK radius 40 height 48  health 900 mass 5000 vehicle tank
+model tank  A VXTANK
+model tank  B VXTANKB light 500 1.0  1.0 0.55 0.2
+model tank  C VXTANKC light 360 0.85 1.0 0.5  0.15
+model tank  D VXTANKD light 360 0.8  1.0 0.55 0.2
+prop  tankturret 21204 sprite VTUR radius 24 height 20 health 1 mass 1 vehicle turret
+model tankturret A VXTURR
 """)
 
 

@@ -91,6 +91,16 @@ void dsda_ReadExCmd(ticcmd_t* cmd, const byte** p) {
   else
     cmd->ex.look = 0;
 
+  cmd->ex.actions2 = 0;
+  cmd->ex.track_l = cmd->ex.track_r = 0;
+  if (cmd->ex.actions & XC_EXT) {
+    cmd->ex.actions2 = *demo_p++;
+    if (cmd->ex.actions2 & XC2_TRACKS) {
+      cmd->ex.track_l = (signed char) *demo_p++;
+      cmd->ex.track_r = (signed char) *demo_p++;
+    }
+  }
+
   *p = demo_p;
 }
 
@@ -110,6 +120,14 @@ void dsda_WriteExCmd(char** p, ticcmd_t* cmd) {
     *demo_p++ = (cmd->ex.look >> 8) & 0xff;
   }
 
+  if (cmd->ex.actions & XC_EXT) {
+    *demo_p++ = cmd->ex.actions2;
+    if (cmd->ex.actions2 & XC2_TRACKS) {
+      *demo_p++ = cmd->ex.track_l;
+      *demo_p++ = cmd->ex.track_r;
+    }
+  }
+
   *p = demo_p;
 }
 
@@ -126,6 +144,18 @@ void dsda_PopExCmdQueue(ticcmd_t* cmd) {
 
 void dsda_QueueExCmdJump(void) {
   excmd_queue.actions |= XC_JUMP;
+}
+
+void dsda_QueueExCmdTracks(int l, int r) {
+  excmd_queue.actions |= XC_EXT;
+  excmd_queue.actions2 |= XC2_TRACKS;
+  excmd_queue.track_l = l;
+  excmd_queue.track_r = r;
+}
+
+void dsda_QueueExCmdStyle(void) {
+  excmd_queue.actions |= XC_EXT;
+  excmd_queue.actions2 |= XC2_STYLE;
 }
 
 void dsda_QueueExCmdAlt(void) {

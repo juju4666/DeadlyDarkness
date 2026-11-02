@@ -41,6 +41,8 @@ typedef struct {
   byte save_slot;
   byte load_slot;
   signed short look;
+  byte actions2;      // begotten: XC2_ flags, sent when actions has XC_EXT
+  signed char track_l, track_r; // begotten: tank track powers -127..127
 } excmd_t;
 
 /* The data sampled per tick (single player)

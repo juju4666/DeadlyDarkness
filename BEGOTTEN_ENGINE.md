@@ -1060,10 +1060,63 @@ bike and 240 cells tall for the mecha; replace the `.vox` files and keep the lin
   the vehicle after every tic (so lines he crosses, items he touches and special sectors still work for him). The link is the two
   `tracer` pointers, so a saved game keeps you in the vehicle (checked with `BEGOTTEN_SELFTEST=8`) and nothing else was added to the
   save format. All arithmetic is integer, so demos and network games stay in step.
-- **Not done:** the tank (two players, one drives and one shoots; the plan is in the conversation: a "wheels" and a "tracks" control
-  style, a turret that turns freely, split-screen with a cockpit view each, which the engine's local split-screen can show),
-  vehicle sounds (engine noise), tyre marks, lean, drivable-vehicle monsters, teleporters while driving (the rider is brought back
+- **Not done:** (the tank came in 0.15.0), vehicle sounds (engine noise), tyre marks, lean, drivable-vehicle monsters, teleporters while driving (the rider is brought back
   to the vehicle), the AI avoiding a parked vehicle, and the wreck being driven off. Weapons of the bike's rider are not used.
 - Developer aids: `BEGOTTEN_VEHTEST="20:use 30:fwd=50 70:turn=-200 100:fwd=0 110:hurt=60 120:fire=1 130:alt=1"` plays player 1's
   controls by tic (`use`, `hurt` once; `fwd side turn fire alt jump` until changed; `turn` is the raw angleturn, 16384 = 90 degrees),
   and `BEGOTTEN_VEHDEBUG=1` prints the state every 10 tics. `tools/make_vehicle_test_map.py` makes a test room with both vehicles.
+
+## 0.15.0 - the tank, and the Vehicle Hall in MAP01
+
+**The tank** (thing 21203, `vehicle tank` in the BGVOXELV lump; code in `dsda/bgvehicle.c`, models by `tools/make_vehicles.py`).
+Two players: one drives, one is the gunner. It is 104 units long, 80 wide (radius 40), 48 tall, health 900, and runs over what it hits
+from 3 units a tic (up to 60 damage).
+
+- **Seats:** Use next to it. The front half of the tank is the driver's seat, the back half the gunner's; if that seat is taken you get
+  the other, and a tank with both seats taken cannot be entered. Use again gets out. One player alone is the driver, and then the
+  turret follows his eyes and his fire button works the guns.
+- **Views (split-screen shows one each):** the driver sits 38 units ahead of the centre, 46 units up, and sees the tank around him (the
+  hull is under him, the turret turns in front of him). The gunner sits in the turret (40 units up) and sees the world along the turret;
+  the turret itself is not drawn for him. The status line says `TANK hp SPEED n WHEELS|TRACKS` for the driver and `TANK hp CANNON
+  READY|RELOADING` for the gunner.
+- **The turret** is a second thing (`vehicle turret`, thing 21204, not placed by hand: the hull makes it itself in its first tic) that
+  turns freely through 360 degrees on top of the hull. The gunner turns it with the mouse, the turn keys or the right stick, and looks up
+  and down with the usual limits. Primary fire: the cannon, a rocket with the usual blast, every 50 tics, with a small recoil on the
+  hull. Alt fire: the coaxial machine gun, a bullet every 3 tics, 8-16 damage. Shots start at the muzzle and pass through the tank.
+- **Controls, "wheels" style** (the default): forward accelerates, back brakes and then reverses, left and right steer (A / D, or the left
+  stick). It turns like a car (a quarter of the steering when standing, full from 3 units a tic), is heavy (acceleration 0.2 a tic, top speed
+  7.5 forward and 3.5 back) and its tyres keep 86% of the sideways speed each tic, so it slides a little. The mouse and the turn keys
+  (and the right stick) look around the cockpit, up to 70 degrees to each side; the tank does not turn with them.
+- **Controls, "tracks" style:** the view is locked straight ahead and the mouse does nothing. Each track has its own keys (Options >
+  Key bindings > Tank): **W / S = left track forward / back, Up / Down = right track forward / back**, so W alone turns the tank to the
+  right while it advances, Up alone to the left, W + Up goes forward, S + Down back, and W + Down (or Up + S) spins it on the spot.
+  A track speeds up at 0.35 units a tic a tic, lets go at 0.22 to 0.6 and changes direction at 1.2, so the tank is slow to start and quick to
+  swing. The heading turns by the difference of the track speeds over 300 units (about 2.7 degrees a tic at full spin) and the tank moves at
+  their mean. Its own sideways speed dies away at 12% a tic, so a tank that is turned at speed keeps sliding in its old direction for a
+  moment (the drift). On a controller the **left stick is the left track and the right stick the right track** (up = forward, down = back,
+  sideways does nothing); the second player's pad does the same in split-screen.
+- **Switching style:** the "Wheels / tracks" key (default C, the Y button on a pad) while driving. The tracks stop and the look goes back
+  to the front. The style is kept on the tank, so a driver who gets out and another who gets in find it as it was.
+- **Destroyed:** both riders are thrown out (15-30 damage each); the hull burns as a wreck and the turret is gone.
+- **How it works:** the hull finds its turret in `lastenemy` (and keeps `threshold` above 0, which stops the damage code from using
+  that field), the turret finds its hull in `target`; riders are linked to their seat by `tracer` as on any vehicle. The tank's state is in
+  spare fields of the hull: `special1` / `special2` the track speeds, `bg_aux` the driver's look, `pursuecount` the style, `movecount` /
+  `strafecount` the gun delays, so saved games need nothing new. The hull moves the turret every tic from its own state action, so the
+  two never drift apart. New command data (`XC_EXT`: one more byte, then two track values): the keyboard and the sticks make
+  them in `G_BuildTiccmd` only for the driver of a tank in "tracks" style; they are in demos (the format is the same when nobody is in a
+  tank, apart from the unused `XC_EXT` bit), in the network packets (three more bytes per command: all players must run the same
+  version) and in the sync check.
+- **Not done / not tested:** the driver sees no cockpit frame, only the world (the hull is not drawn in his view, only what he sees of it
+  below him); no engine sound; no per-track sounds or dust; the gunner and the driver do not talk to each other except through the tank.
+
+**The Vehicle Hall** (MAP01): a door in the west wall of the first room (the start room, x 0..384, y 0..256; Use opens it from both
+sides) leads along a corridor (128 wide and 128 high, so the tank and the mechas go through it) to a big hall (x -2400..-640, y -560..720,
+256 high) with two motorcycles and two mechas along the north wall, the tank, the six car props (21101) along the south wall, a stepped
+platform in the middle, four pillars, a row of barrels to run over, and ceiling spots and lamps (with the engine's shadows).
+`tools/make_vehicle_hall.py IN.wad OUT.wad [ZDBSP]` adds it to a wad's MAP01 (it appends sectors, lines and things and cuts one line, so
+nothing in the map changes number; it refuses a map that already has it). `tools/wad_put_vehicles.py IN.wad OUT.wad` puts the vehicle
+lumps into a wad without touching the rest (`pack_wad.py` drops UDMF map lumps, so do not use it on a wad with real maps).
+If you have changed MAP01 in your own editor, run the hall script on your version rather than using `begotten.wad` from here.
+
+Developer aids: `BEGOTTEN_VEHTEST` also takes `tl=n tr=n` (the tracks, -127..127) and `style` (once), and `BEGOTTEN_VEHTEST2` plays
+player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now has a second player start.

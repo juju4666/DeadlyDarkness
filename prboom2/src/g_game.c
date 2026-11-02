@@ -102,6 +102,8 @@
 #include "dsda/death.h"
 #include "dsda/demo.h"
 #include "dsda/excmd.h"
+#include "dsda/bgvehicle.h"
+#include "dsda/game_controller.h"
 #include "dsda/begotten.h"
 #include "dsda/bgcoop.h"
 #include "dsda/exdemo.h"
@@ -834,6 +836,31 @@ void G_BuildTiccmd(ticcmd_t* cmd)
       // the limits are applied where the look is carried out (P_HandleExCmdLook), so that a few queued
       // tics cannot push past them and then be pulled back, which made the view bounce
       dsda_QueueExCmdLook(look);
+    }
+  }
+
+  // begotten: the tank. Its style key, and in "tracks" style the two tracks replace the movement keys
+  if (bg_weapons && bgveh_IsTankDriver(&players[consoleplayer]))
+  {
+    if (dsda_InputTickActivated(dsda_input_tank_style))
+      dsda_QueueExCmdStyle();
+    if (bgveh_WantsTracks(&players[consoleplayer]))
+    {
+      int l = 0, r = 0, sl, sr;
+
+      if (dsda_InputActive(dsda_input_tank_left_fwd))   l += 127;
+      if (dsda_InputActive(dsda_input_tank_left_back))  l -= 127;
+      if (dsda_InputActive(dsda_input_tank_right_fwd))  r += 127;
+      if (dsda_InputActive(dsda_input_tank_right_back)) r -= 127;
+      sl = dsda_GameControllerStickY(0);
+      sr = dsda_GameControllerStickY(1);
+      if (!l) l = sl;
+      if (!r) r = sr;
+      dsda_QueueExCmdTracks(l, r);
+      forward = side = 0;
+      cmd->forwardmove = 0;
+      cmd->sidemove = 0;
+      cmd->angleturn = 0;
     }
   }
 
@@ -3315,7 +3342,7 @@ void G_ReadOneTick(ticcmd_t* cmd, const byte **data_p)
  */
 void G_WriteDemoTiccmd (ticcmd_t* cmd)
 {
-  char buf[10];
+  char buf[20];
   char *p = buf;
   const byte* data_p = (byte*)buf;
 

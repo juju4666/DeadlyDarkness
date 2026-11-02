@@ -26,6 +26,7 @@
 #include "dsda/bgnet.h"
 #include "dsda/bgcoop.h"
 #include "dsda/bgsplit.h"
+#include "dsda/bgvehicle.h"
 #include "dsda/configuration.h"
 #include "dsda/excmd.h"
 #include "dsda/game_controller.h"
@@ -223,7 +224,7 @@ typedef struct
 {
   SDL_GameController* pad;
   dboolean is_first; // the pad is the one that normally belongs to player 1
-  dboolean prev_next, prev_prev;
+  dboolean prev_next, prev_prev, prev_style;
 } bg_pad_t;
 
 static bg_pad_t pads[BG_SPLIT_MAX];
@@ -318,6 +319,24 @@ void bg_SplitBuildCmd(int k, ticcmd_t* cmd)
   cmd->forwardmove = (signed char) (-ay * 50 / 32768);
   cmd->sidemove = (signed char) (ax * 40 / 32768);
   cmd->angleturn = (short) (-rx * 1100 / 32768);
+
+  // the tank: Y switches the control style; in "tracks" the two sticks are the two tracks
+  {
+    dboolean style = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y);
+
+    if (style && !b->prev_style && bgveh_IsTankDriver(&players[player]))
+      cmd->ex.actions |= XC_EXT, cmd->ex.actions2 |= XC2_STYLE;
+    b->prev_style = style;
+    if (bgveh_WantsTracks(&players[player]))
+    {
+      cmd->ex.actions |= XC_EXT;
+      cmd->ex.actions2 |= XC2_TRACKS;
+      cmd->ex.track_l = (signed char) (-ay * 127 / 32768);
+      cmd->ex.track_r = (signed char) (-bg_Axis(pad, SDL_CONTROLLER_AXIS_RIGHTY) * 127 / 32768);
+      cmd->forwardmove = cmd->sidemove = 0;
+      cmd->angleturn = 0;
+    }
+  }
 
   if (bg_Axis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000)
     cmd->buttons |= BT_ATTACK;

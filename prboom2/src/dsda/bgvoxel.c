@@ -49,6 +49,7 @@
 #include "dsda/bglight.h"
 #include "dsda/bgscale.h"
 #include "dsda/bgvoxel.h"
+#include "dsda/bgvehicle.h"
 #include "dsda/mobjinfo.h"
 #include "dsda/sprite.h"
 
@@ -93,7 +94,7 @@ typedef struct
   char sprname[5];
   int ednum, sprite, type;
   int health, radius, height, mass;
-  int vehicle;                 // 0: scenery, 1: motorcycle, 2: mecha (see bgvehicle.c)
+  int vehicle;                 // 0: scenery, 1: motorcycle, 2: mecha, 3: tank hull, 4: tank turret (see bgvehicle.c)
   double offx, offy, offz;     // map units
   vframe_t fr[4];
   int idle, death0, death1, wreck0, wreck1;
@@ -729,11 +730,16 @@ static void vox_BuildProp(vprop_t* p)
   int hasD = p->fr[3].model >= 0;
 
   p->sprite = dsda_AddSpriteName(p->sprname);
-  p->idle = vox_State(p->sprite, 0, -1, NULL);
+  // the tank hull looks after its turret every tic (bgvehicle.c)
+  p->idle = vox_State(p->sprite, 0, p->vehicle == 3 ? 1 : -1, p->vehicle == 3 ? ACT(bgveh_A_TankThink) : NULL);
   p->death0 = vox_State(p->sprite, 1, 4, ACT(A_Scream));
   p->death1 = vox_State(p->sprite, 1, 1, ACT(A_Explode));
-  p->wreck0 = vox_State(p->sprite, 2, 6, ACT(A_VoxWreck));
-  p->wreck1 = hasD ? vox_State(p->sprite, 3, 6, ACT(A_VoxWreck)) : p->wreck0;
+  {
+    actionf_t wr = p->vehicle == 3 ? ACT(bgveh_A_TankWreck) : ACT(A_VoxWreck);
+
+    p->wreck0 = vox_State(p->sprite, 2, 6, wr);
+    p->wreck1 = hasD ? vox_State(p->sprite, 3, 6, wr) : p->wreck0;
+  }
   states[p->death0].nextstate = p->death1;
   states[p->death1].nextstate = p->wreck0;
   states[p->wreck0].nextstate = p->wreck1;
@@ -754,6 +760,8 @@ static void vox_BuildProp(vprop_t* p)
   info.flags = MF_SOLID | MF_SHOOTABLE | MF_NOBLOOD;
   if (p->vehicle)
     info.flags |= MF_DROPOFF;      // a vehicle can drive off a ledge
+  if (p->vehicle == 4)
+    info.flags = MF_NOGRAVITY | MF_NOBLOCKMAP | MF_NOBLOOD;   // the turret is only a picture that turns
   info.deathsound = sfx_barexp;
   p->type = dsda_AppendMobjInfo(&info);
 }
@@ -825,9 +833,10 @@ static void vox_Parse(const char* text)
         else if (!strcasecmp(tok[k], "vehicle") && k + 1 < n)
         {
           ++k;
-          p->vehicle = !strcasecmp(tok[k], "moto") ? 1 : !strcasecmp(tok[k], "mecha") ? 2 : 0;
+          p->vehicle = !strcasecmp(tok[k], "moto") ? 1 : !strcasecmp(tok[k], "mecha") ? 2 :
+                       !strcasecmp(tok[k], "tank") ? 3 : !strcasecmp(tok[k], "turret") ? 4 : 0;
           if (!p->vehicle)
-            lprintf(LO_WARN, "BGVOXEL: prop %s: `vehicle %s` is not moto or mecha\n", p->key, tok[k]);
+            lprintf(LO_WARN, "BGVOXEL: prop %s: `vehicle %s` is not moto, mecha, tank or turret\n", p->key, tok[k]);
         }
         else if (!strcasecmp(tok[k], "offset") && k + 3 < n)
         {
@@ -931,6 +940,16 @@ int bgvox_VehicleKind(const mobj_t* thing)
     if (props[i].vehicle && props[i].type == thing->type)
       return props[i].vehicle;
   return 0;
+}
+
+int bgvox_TypeOfKind(int kind)
+{
+  int i;
+
+  for (i = 0; i < num_props; ++i)
+    if (props[i].vehicle == kind)
+      return props[i].type;
+  return -1;
 }
 
 int bgvox_Count(void)

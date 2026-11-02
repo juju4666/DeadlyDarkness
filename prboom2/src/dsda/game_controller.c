@@ -98,6 +98,21 @@ static float dsda_AxisValue(axis_t* axis) {
   return (float) value * axis->sensitivity / (32768 - axis->deadzone);
 }
 
+// Begotten: a stick's up-down position as -127..127 (up is positive), dead zone applied; the tank's tracks
+int dsda_GameControllerStickY(int right) {
+  axis_t* axis = right ? &right_analog_y : &left_analog_y;
+  int value, dz;
+
+  if (!game_controller)
+    return 0;
+  value = SDL_GameControllerGetAxis(game_controller, axis->axis);
+  dz = axis->deadzone > 4000 ? axis->deadzone : 4000;
+  if (value > -dz && value < dz)
+    return 0;
+  value = -value * 127 / 32768;
+  return value > 127 ? 127 : value < -127 ? -127 : value;
+}
+
 static void dsda_PollLeftStick(void) {
   event_t ev;
 
