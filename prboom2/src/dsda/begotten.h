@@ -80,6 +80,9 @@ dboolean bg_AmmoPickup(int mobjtype, int* ammo, int* clips, const char** message
 // Screen flashes. kind: 0 = blue (health), 1 = yellow (shield); big = a 100-point pickup.
 void bg_PickupFlash(player_t* player, int kind, dboolean big);
 int bg_StabPhase(const player_t* player);
+int bg_SparkState(void);                   // the state of a spark (-1 before the states are made)
+void bg_RailStab(player_t* player);        // off a grind rail with a fully charged, double damage stab
+dboolean bg_BladeReady(const player_t* player);
 const state_t* bg_StabPhaseState(int phase);
 void bg_FlashTick(player_t* player);
 // the tint palette (0 = none) of the pickup flash the player sees

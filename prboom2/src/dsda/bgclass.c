@@ -26,6 +26,7 @@
 
 #include "dsda/begotten.h"
 #include "dsda/bgclass.h"
+#include "dsda/bgrail.h"
 #include "dsda/bgroster.h"
 #include "dsda/bgmonster.h"
 #include "sounds.h"
@@ -740,6 +741,8 @@ void bg_ClassReborn(player_t* player)
     return;
 
   player->bgclass = bg_player_class[player - players];
+  if (player == &players[1] && getenv("BEGOTTEN_CLASS2"))
+    player->bgclass = atoi(getenv("BEGOTTEN_CLASS2"));   // developer aid: player 2's class in a split-screen test
   // (in a network game the class was chosen by the machine of that player: availability is a property of his
   // profile, not of this machine's, and the machines must agree)
   if (player->bgclass < 0 || player->bgclass >= num_classes || (!netgame && !bg_ClassAvailable(player->bgclass)))
@@ -1372,14 +1375,16 @@ dboolean bg_PlayerPose(const struct mobj_s* thing, int* sprite, int* frame)
     return false;
 
   st = PoseState(thing);
-  if (st != S_PLAY && !IsRunState(st) && !IsAttackState(st))
+  if (st != S_PLAY && !IsRunState(st) && !IsAttackState(st) && !bgrail_Grinding(pl))
     return false;   // pain, death and anything else keep the state's own frame
 
   weapon = pl->readyweapon;
 
   // what the player is doing, most specific first; each falls back to the next, and finally to
   // the standing pose of the same weapon
-  if (pl->bgparrytic >= 0 && (pl->readyweapon == wp_spare || pl->bgparry > 0))
+  if (bgrail_Grinding(pl))
+    order[n++] = POSE_PARRY;      // grinding a rail looks like guarding: one foot in front, one behind, the guard frame
+  else if (pl->bgparrytic >= 0 && (pl->readyweapon == wp_spare || pl->bgparry > 0))
     order[n++] = POSE_PARRY;
   {
     // the swordsman's stab: the sword drawn back beside her (still, walking, in the air), then the lunge (feet on the
@@ -1502,6 +1507,19 @@ void dsda_BgPoseSelfTest(void)
     pl.bgparrytic = 4;
     bg_PlayerPose(&m, &spr, &frame);
     PT((frame & FF_FRAMEMASK) == 1, "parrying: the stance changes with the guard clock");
+    {
+      int guard_spr;
+
+      bg_PlayerPose(&m, &spr, &frame);
+      guard_spr = spr;
+      SETUP(S_PLAY_RUN1);
+      pl.bgclass = sword; pl.readyweapon = wp_fist; pl.bgparrytic = -1;
+      pl.mo = &m; m.flags |= MF_NOGRAVITY; m.special2.i = 1;     // on a grind rail (bgrail.c)
+      PT(bg_PlayerPose(&m, &spr, &frame) && spr == guard_spr && (frame & FF_FRAMEMASK) == 0, "grinding a rail: the guard pose");
+      m.flags &= ~MF_NOGRAVITY; m.special2.i = 0; pl.mo = NULL;
+      pl.bgparrytic = 4; pl.readyweapon = wp_spare; SETUP(S_PLAY);
+      pl.bgclass = sword; pl.readyweapon = wp_spare; pl.bgparrytic = 4;
+    }
     SETUP(S_PLAY_ATK1);
     pl.bgclass = sword; pl.readyweapon = wp_spare; pl.bgparrytic = 2; pl.bgatktic = 1;
     {

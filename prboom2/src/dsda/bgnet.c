@@ -97,7 +97,7 @@ extern void doom_printf(const char* msg, ...);
 
 // Raise this whenever a change alters the simulation (movement, damage, weapons...). Machines with
 // different numbers cannot play together: the number is part of the content check at joining.
-#define BGNET_SIM_REV 12
+#define BGNET_SIM_REV 13
 #define PKT_HELLO 1
 #define PKT_LOBBY 2
 #define PKT_REJECT 3

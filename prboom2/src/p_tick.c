@@ -345,7 +345,7 @@ void P_Ticker (void)
     dsda_BegottenSpectateTest();
   if (leveltime == 5 && getenv("BEGOTTEN_HEALTH") && playeringame[0] && players[0].mo)
     players[0].health = players[0].mo->health = atoi(getenv("BEGOTTEN_HEALTH"));   // developer aid: start with this health
-  if (leveltime == 5 && getenv("BEGOTTEN_TELEPORT") && playeringame[0] && players[0].mo)
+  if (leveltime == 5 && (getenv("BEGOTTEN_TELEPORT") || getenv("BEGOTTEN_TELEPORT2")) && playeringame[0] && players[0].mo)
     dsda_BegottenDevTeleport();   // developer: BEGOTTEN_TELEPORT="x y angle" puts player 1 there
   if (getenv("BEGOTTEN_FLASH") && playeringame[0] && players[0].mo)
     players[0].powers[pw_infrared] = 100000;   // developer: BEGOTTEN_FLASH=1 keeps the flashlight on

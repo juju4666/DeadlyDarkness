@@ -66,6 +66,7 @@
 #include "dsda/bgscale.h"
 #include "dsda/bgclass.h"
 #include "dsda/bglight.h"
+#include "dsda/bgrail.h"
 #include "dsda/bgcolor.h"
 #include "dsda/bgmonster.h"
 #include "s_sound.h"
@@ -1111,6 +1112,8 @@ static void bg_AddDynamicLights(void)
     }
     else if ((mo->flags & MF_SPECIAL) && bg_IsPowerup(mo->type))
       d = &dyn_powerup;
+    else if (mo->type == MT_PUFF && mo->bg_aux == 77)
+      continue;                        // a spark off a grind rail (bgrail.c): it has no light of its own
     else if (mo->type == MT_PUFF)
     {
       int idx = (int) (mo->state - states) - S_PUFF1;
@@ -1170,6 +1173,26 @@ static void bg_AddDynamicLights(void)
     if (tmp.shadow && !bg_ClearPath(x, y, z + 40.0, mx, my, z + 40.0))
       mx = x, my = y;                  // against a wall: the flash would be inside it and light nothing, so it comes from the eye
     bg_AddLight(&tmp, pm, mx, my, z + 40.0 + dyn_muzzle.height, 0, 0, NULL);
+  }
+
+  // a swordsman grinding a rail lights the rail under his feet (warm and flickering), so the others see him in the dark
+  for (i = 0; i < MAX_MAXPLAYERS; ++i)
+  {
+    const mobj_t* pm;
+    double x, y, z;
+    bg_lightdef_t tmp;
+
+    if (!playeringame[i] || !(pm = players[i].mo) || pm->health <= 0 || !bgrail_Grinding(&players[i]))
+      continue;
+    bg_MobjPos(pm, &x, &y, &z);
+    tmp = dyn_puff;
+    tmp.radius = 190;
+    tmp.strength = 1.0;
+    tmp.shadow = false;
+    tmp.flicker = 1;
+    tmp.flick_rate = 14.0;
+    tmp.flick_depth = 0.35;
+    bg_AddLight(&tmp, pm, x, y, z + 6.0, 0, 0, NULL);
   }
 
   // the flashlight: the light amplification pickup, a cone along the view; it blinks for its last seconds

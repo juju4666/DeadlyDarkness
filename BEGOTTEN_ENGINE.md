@@ -1172,3 +1172,17 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
     demos and network games need nothing more; the arithmetic is integer.
   - `tools/make_rail_demo.py IN.wad OUT.wad` adds a rail course along the south and east of the Vehicle Hall (the shipped begotten.wad has it);
     `RAILS='x1 y1 x2 y2 [h [speed]];...'` adds rails to `tools/make_vehicle_test_map.py`'s room (`NOIMPS=1` leaves out the imps).
+
+## 0.15.4 - rails: looking, sparks, light, pose, stab (simulation revision 13)
+
+- **The swordsman can look around while grinding** (mouse, turn keys, free look): the rail decides where he goes, he decides where he faces.
+- **Sparks** come off his feet while he grinds: bullet-puff stars (a state of their own, `bg_SparkState`, bright for a few tics and gone, no smoke)
+  thrown back and up under gravity. The slower he grinds the more: about two a tic at 20 units a tic, one every eight tics at the top speed. They are real
+  things made inside the tic with the game's random numbers (so every machine makes the same ones), marked `bg_aux = 77` so the light code does not give them lights.
+- **A light at his feet** (warm, flickering, radius 190, no shadow, drawn from the player's state only) so others see him grinding in the dark (`bglight.c`).
+- **Pose:** a grinding swordsman is drawn with the parry pose (first guard frame), also from the other players' side (`bgclass.c`, self test "grinding a rail: the guard pose").
+- **Attack on a rail:** pressing the attack key with the blade ready takes him off the rail with a fully charged stab (the class's full-charge damage, doubled: 200 for the swordsman)
+  in the direction he faces, carrying the rail's speed (`bg_RailStab`).
+- **Reflected projectiles and shots already do double damage** (`BG_PARRY_DAMAGE_PCT 200`, also for parried hitscan; covered by the parry self test), unchanged.
+- Developer aids: `BEGOTTEN_TELEPORT2="x y angle"` and `BEGOTTEN_CLASS2=n` (player 2's place and class in a split-screen test).
+- `BGNET_SIM_REV` is 13: the rails, the bike gun and the empty-bike crash change the simulation, so 0.15.3 and 0.15.4 machines cannot play together.

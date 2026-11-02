@@ -762,9 +762,17 @@ void P_PlayerThink (player_t* player)
 
   if (player->mo->reactiontime)
     player->mo->reactiontime--;
-  else if (bg_weapons && (bgveh_Control(player) || bgrail_Control(player)))
+  else if (bg_weapons && bgveh_Control(player))
   {
     // Begotten: driving a vehicle (dsda/bgvehicle.c)
+  }
+  else if (bg_weapons && bgrail_Control(player))
+  {
+    // Begotten: grinding a rail (dsda/bgrail.c): the path is the rail's, the view is his own
+    P_HandleExCmdLook(player);
+    player->mo->angle += cmd->angleturn << 16;
+    if (demo_smoothturns && player == &players[displayplayer])
+      R_SmoothPlaying_Add(cmd->angleturn << 16);
   }
   else
   {

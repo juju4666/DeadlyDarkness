@@ -18,6 +18,11 @@
 #include "dsda/excmd.h"
 #include "dsda/bgclass.h"
 #include "dsda/bgrail.h"
+#include "dsda/begotten.h"
+#include "m_random.h"
+#include "info.h"
+#include "p_pspr.h"
+#include "d_event.h"
 
 extern int validcount;
 
@@ -240,6 +245,34 @@ static void get_off(player_t* player, const rseg_t* s, fixed_t speed, fixed_t mo
   mo->momz = momz;
 }
 
+// Sparks off his feet, backwards and up: the slower he grinds the more of them (about 2 a tic at 20 units a tic, one in eight tics at
+// the top speed). They are bullet puffs given gravity and marked (bg_aux) so the light code leaves them out.
+#define SPARK_MARK 77
+
+static void grind_sparks(mobj_t* mo, const rseg_t* s, fixed_t speed)
+{
+  int k = (30 * FRACUNIT - speed) / (FRACUNIT / 2), n, i;
+
+  if (k < 1)
+    k = 1;
+  n = k / 8 + ((P_Random(pr_misfire) & 7) < (k & 7));
+  for (i = 0; i < n; ++i)
+  {
+    mobj_t* sp = P_SpawnMobj(mo->x, mo->y, mo->z + 2 * FRACUNIT, MT_PUFF);
+    fixed_t back = (2 + (P_Random(pr_misfire) & 3)) * FRACUNIT;
+    fixed_t side = ((P_Random(pr_misfire) & 7) - 3) * FRACUNIT;
+
+    if (bg_SparkState() > 0)
+      P_SetMobjState(sp, bg_SparkState());
+    sp->flags &= ~MF_NOGRAVITY;
+    sp->bg_aux = SPARK_MARK;
+    sp->momx = -FixedMul(s->ux, back) - FixedMul(s->uy, side);
+    sp->momy = -FixedMul(s->uy, back) + FixedMul(s->ux, side);
+    sp->momz = (2 + (P_Random(pr_misfire) & 3)) * FRACUNIT;
+    sp->tics = 4 + (P_Random(pr_misfire) & 3);
+  }
+}
+
 dboolean bgrail_Control(player_t* player)
 {
   mobj_t* mo = player->mo;
@@ -305,6 +338,16 @@ dboolean bgrail_Control(player_t* player)
     speed = speed - FRACUNIT / 2 < want ? want : speed - FRACUNIT / 2;
   if (speed > RAIL_TOPSPEED)
     speed = RAIL_TOPSPEED;
+
+  // off with the blade: a fully charged stab, twice the damage, thrown on along the rail
+  if ((cmd->buttons & BT_ATTACK) && bg_BladeReady(player))
+  {
+    get_off(player, &s, speed, 2 * FRACUNIT);
+    bg_RailStab(player);
+    if (getenv("BEGOTTEN_VEHDEBUG"))
+      fprintf(stderr, "RAIL stab off at %.1f: damage %d\n", speed / 65536.0, player->bgstabdmg);
+    return false;
+  }
 
   // off with a jump: the faster he goes, the higher and further
   if (jump_now && !jump_held)
@@ -379,6 +422,7 @@ dboolean bgrail_Control(player_t* player)
   mo->momz = tz - mo->z;
   if (!(mo->flags & MF_NOCLIP))
     mo->flags |= MF_NOCLIP;
+  grind_sparks(mo, &s, speed);
   if (!(leveltime & 7))
     S_StartMobjSound(mo, sfx_stnmov);
   if (getenv("BEGOTTEN_VEHDEBUG") && !(leveltime & 7))

@@ -418,6 +418,7 @@ static void A_BGHellfire(player_t* player, pspdef_t* psp)
 }
 
 // Tornado: what is left of the projectile after it hit something.
+static int bg_spark_state = -1;
 static int bg_stick_state = -1;
 static int bg_stick_state2 = -1;
 static int bg_torn_death_state = -1;
@@ -1123,6 +1124,32 @@ static void A_BGRipThrust(player_t* player, pspdef_t* psp)
   bg_StabStrike(player, true);
 }
 
+int bg_SparkState(void)
+{
+  return bg_spark_state;
+}
+
+// Off a grind rail with the blade: a fully charged stab, twice the damage, from wherever he is (bgrail.c calls this).
+void bg_RailStab(player_t* player)
+{
+  int full = bg_ClassChargeTics(player);
+
+  if (full <= 0)
+    return;
+  player->bgcharge = BG_TAP_TICS + full;
+  player->bgstabdmg = 2 * bg_ClassChargeDamage(player, full);
+  player->bgstabspd = bg_ClassLunge(player, full);
+  P_SetPsprite(player, ps_weapon, bg_stab_go_state);
+}
+
+// can the blade be swung now: the swordsman's sword is ready, not busy and not guarding
+dboolean bg_BladeReady(const player_t* player)
+{
+  return player->readyweapon != wp_spare && player->pendingweapon == wp_nochange && bg_ClassChargeTics(player) > 0 &&
+         bg_StabPhase(player) == 0 && player->psprites[ps_weapon].state &&
+         player->psprites[ps_weapon].state == &states[weaponinfo[player->readyweapon].readystate];
+}
+
 // What the swordsman's blade is doing, for the third-person sprites other players see:
 // 0 nothing, 1 the sword is drawn back (charging, the pause before the lunge, the riposte's wind-up), 2 lunging.
 int bg_StabPhase(const player_t* player)
@@ -1615,6 +1642,9 @@ static void bg_DefineStates(void)
     states[bg_stick_state2].nextstate = bg_stick_state;
     mobjinfo[bg_tornado_type].deathstate = bg_torn_death_state;
   }
+
+  // a spark: the bright star of a bullet puff, a few tics, then gone (grind rails, bgrail.c)
+  bg_spark_state = S0(SPR_PUFF, 32768, 6, NULL, S_NULL);
 
   // The other projectiles, one picture each: fireball (FBAL), devil's breath flame (DBRT), arc lightning bolt (ARCB),
   // hellfire's alien rocket (HLFR, 8 directions) and the thunderclap's ring (CLAP)
@@ -5805,15 +5835,17 @@ void bg_ForgetKeys(int playernum)
     }
 }
 
-// developer aid: BEGOTTEN_TELEPORT="x y degrees" moves player 1 (to look at a map from a given spot)
-void dsda_BegottenDevTeleport(void)
+// developer aid: BEGOTTEN_TELEPORT="x y degrees [pitch]" moves player 1 (to look at a map from a given spot), BEGOTTEN_TELEPORT2 player 2
+static void bg_DevTeleportPlayer(int n, const char* env)
 {
   double x, y, a = 0, pitch = 0;
-  mobj_t* mo = players[0].mo;
+  mobj_t* mo;
 
-  if (sscanf(getenv("BEGOTTEN_TELEPORT"), "%lf %lf %lf %lf", &x, &y, &a, &pitch) < 2)
+  if (!env || !playeringame[n] || !(mo = players[n].mo))
     return;
-  if (getenv("BEGOTTEN_POWER_INFRARED"))
+  if (sscanf(env, "%lf %lf %lf %lf", &x, &y, &a, &pitch) < 2)
+    return;
+  if (n == 0 && getenv("BEGOTTEN_POWER_INFRARED"))
     players[0].powers[pw_infrared] = atoi(getenv("BEGOTTEN_POWER_INFRARED"));
   if (pitch != 0)
     dsda_UpdateIntConfig(dsda_config_freelook, 1, false);
@@ -5826,7 +5858,13 @@ void dsda_BegottenDevTeleport(void)
   mo->ceilingz = mo->subsector->sector->ceilingheight;
   mo->z = mo->PrevZ = mo->floorz;
   mo->angle = (angle_t) (a / 360.0 * 4294967296.0);
-  players[0].viewz = mo->z + players[0].viewheight;
+  players[n].viewz = mo->z + players[n].viewheight;
+}
+
+void dsda_BegottenDevTeleport(void)
+{
+  bg_DevTeleportPlayer(0, getenv("BEGOTTEN_TELEPORT"));
+  bg_DevTeleportPlayer(1, getenv("BEGOTTEN_TELEPORT2"));
 }
 
 
