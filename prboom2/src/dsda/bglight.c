@@ -250,12 +250,16 @@ static void bg_FogCacheClear(void)
 }
 
 // sun: a directional light for one level (BGLIGHT command `sun`), baked like the stationary lights
-typedef struct { char map[9]; double angle, elev, strength; int tint; } bg_sundef_t;
+typedef struct { char map[9]; double angle, elev, strength, bounce; int tint; } bg_sundef_t;
 static bg_sundef_t sundefs[BG_MAXFOGS];
 static int num_sundefs;
 static dboolean sun_active;
 static double sun_angle, sun_elev, sun_strength;
 static int sun_tint;
+static double sun_bounce;                     // BGLIGHT sun `bounce`: ambient light the sun gives each sector it reaches
+static float* sunfill;                        // per sector: 0..1, how much of the sector the sun reaches (square root), baked
+static int sunfill_n;
+static dboolean sunfill_any;
 
 // weather: rain or snow on one level (BGLIGHT command `weather`), with optional thunder
 typedef struct { char map[9]; int kind; double density, wind, thunder; } bg_weatherdef_t;   // kind 1 rain, 2 snow
@@ -299,7 +303,7 @@ static int* flood_stack;
 #define BG_LOS_CELL 64.0
 #define BG_MAXWALLBAKED 24      // baked lights blended on one wall column
 
-typedef struct { int w, h; double x0, y0, step; byte* v; } bg_grid_t;   // step: map units between samples (0: BG_FLAT_STEP)
+typedef struct { int w, h; double x0, y0, step; byte* v; unsigned short* sec; } bg_grid_t;   // sec (the sun only): the sector each sample lies in   // step: map units between samples (0: BG_FLAT_STEP)
 typedef struct { int light, w, h; double z0; byte* v; byte* colmax; } bg_wlayer_t;   // v[i * h + j]: along i, up j
 typedef struct { int n; bg_wlayer_t* l; } bg_seglay_t;
 
@@ -534,7 +538,10 @@ static void bg_ParseLightText(const char* text_in)
         else if (!strcasecmp(w, "elevation") && (v = strtok_r(NULL, " \t\r", &save))) u.elev = atof(v);
         else if (!strcasecmp(w, "strength") && (v = strtok_r(NULL, " \t\r", &save))) u.strength = atof(v);
         else if (!strcasecmp(w, "color") && (v = strtok_r(NULL, " \t\r", &save))) u.tint = bg_FindTint(v);
+        else if (!strcasecmp(w, "bounce") && (v = strtok_r(NULL, " \t\r", &save))) u.bounce = atof(v);
       }
+      if (u.bounce < 0) u.bounce = 0;
+      if (u.bounce > 0.9) u.bounce = 0.9;
       if (u.elev < 3) u.elev = 3;
       if (u.elev > 89) u.elev = 89;
       if (u.strength < 0) u.strength = 0;
@@ -1775,17 +1782,28 @@ static void bg_GlowUpdate(void)
   for (i = 0; i < numsectors * 3; ++i)
     if (sglow[i] > top)
       top = sglow[i];
-  glow_any = top >= 0.01;
+  glow_any = top >= 0.01 || sunfill_any;
 }
 
 // the spilled light of sector s: its strength (0 = none) and colour (largest channel 1)
 static double bg_GlowAt(int s, double* colour)
 {
-  double r, g, b, mx;
+  double r = 0, g = 0, b = 0, mx;
 
-  if (!glow_any || s < 0 || s >= sglow_n)
+  if (!glow_any || s < 0)
     return 0;
-  r = sglow[s * 3]; g = sglow[s * 3 + 1]; b = sglow[s * 3 + 2];
+  if (sglow && s < sglow_n)
+  {
+    r = sglow[s * 3]; g = sglow[s * 3 + 1]; b = sglow[s * 3 + 2];
+  }
+  if (sunfill && s < sunfill_n && sunfill[s] > 0)
+  {
+    double v = sunfill[s];
+
+    r = 1.0 - (1.0 - r) * (1.0 - v * tints[sun_tint].c[0]);
+    g = 1.0 - (1.0 - g) * (1.0 - v * tints[sun_tint].c[1]);
+    b = 1.0 - (1.0 - b) * (1.0 - v * tints[sun_tint].c[2]);
+  }
   mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
   if (mx < 0.01)
     return 0;
@@ -2088,6 +2106,7 @@ void bg_LightsNewLevel(void)
       sun_elev = sundefs[sbest].elev;
       sun_strength = sundefs[sbest].strength;
       sun_tint = sundefs[sbest].tint;
+      sun_bounce = sundefs[sbest].bounce;
       lprintf(LO_INFO, "BGLIGHT: sun on this level (from %g degrees, %g up, strength %g)\n", sun_angle, sun_elev, sun_strength);
     }
   }
@@ -2944,38 +2963,53 @@ static void bg_BakeSun(void)
   S->floor.w = w;
   S->floor.h = h;
   S->floor.step = step;
-  S->floor.x0 = floor((minx - 16.0) / step) * step;
-  S->floor.y0 = floor((miny - 16.0) / step) * step;
+  // (the samples are shifted a fraction of a unit, so that none lies exactly on a sector's edge: a sample belongs to one
+  // sector for certain, and the lookup uses only the samples of the sector it is asked about)
+  S->floor.x0 = floor((minx - 16.0) / step) * step + 0.37;
+  S->floor.y0 = floor((miny - 16.0) / step) * step + 0.61;
   S->floor.v = calloc((size_t) w * h, 1);
-  for (j = 0; j < h; ++j)
-    for (i = 0; i < w; ++i)
-    {
-      double x = S->floor.x0 + i * step, y = S->floor.y0 + j * step, c;
-      const subsector_t* ss;
+  S->floor.sec = calloc((size_t) w * h, sizeof(unsigned short));
+  {
+    double* lit = calloc(numsectors, sizeof(double));
+    double* tot = calloc(numsectors, sizeof(double));
 
-      if (fabs(x) > 32000.0 || fabs(y) > 32000.0)
-        continue;
-      // A sample that lies exactly on a sector's edge belongs to whichever sector the node builder picks, which made a dark
-      // seam along doorways and garage mouths (the ray started "inside" the roofed sector). Take the point a hair toward
-      // the sun instead: the sector the light would be coming from.
+    for (j = 0; j < h; ++j)
+      for (i = 0; i < w; ++i)
       {
-        double nx = x, ny = y;
-        double hl = hypot(s3[0], s3[1]);
+        double x = S->floor.x0 + i * step, y = S->floor.y0 + j * step, c;
+        const subsector_t* ss;
+        int sc;
 
-        if (hl > 1e-9)
-        {
-          nx = x + 0.5 * s3[0] / hl;
-          ny = y + 0.5 * s3[1] / hl;
-        }
-        ss = R_PointInSubsector((fixed_t) (nx * 65536.0), (fixed_t) (ny * 65536.0));
+        if (fabs(x) > 32000.0 || fabs(y) > 32000.0)
+          continue;
+        ss = R_PointInSubsector((fixed_t) (x * 65536.0), (fixed_t) (y * 65536.0));
         if (!ss)
           continue;
+        sc = (int) (ss->sector - sectors);
+        S->floor.sec[(size_t) j * w + i] = (unsigned short) (sc + 1);
+        tot[sc] += 1.0;
         c = bg_Contribution(&S->g, x, y, bg_Fix(ss->sector->floorheight), n);
-        if (c <= 0 || !bg_SunReaches(&los, ss->sector, nx, ny, bg_Fix(ss->sector->floorheight) + 1.0, maxz, s3))
+        if (c <= 0 || !bg_SunReaches(&los, ss->sector, x, y, bg_Fix(ss->sector->floorheight) + 1.0, maxz, s3))
           continue;
+        S->floor.v[(size_t) j * w + i] = (byte) (c * 255.0 + 0.5);
+        lit[sc] += 1.0;
       }
-      S->floor.v[(size_t) j * w + i] = (byte) (c * 255.0 + 0.5);
+    // the sun's ambient light: every sector it reaches holds some of it all over, more the more of the sector it reaches
+    if (sun_bounce > 0)
+    {
+      sunfill = calloc(numsectors, sizeof(float));
+      sunfill_n = numsectors;
+      for (i = 0; i < numsectors; ++i)
+        if (tot[i] > 0 && lit[i] > 0)
+        {
+          sunfill[i] = (float) (sun_bounce * sqrt(lit[i] / tot[i]));
+          if (sunfill[i] > 0.004f)
+            sunfill_any = true;
+        }
     }
+    free(lit);
+    free(tot);
+  }
 
   if (getenv("BEGOTTEN_SUNDUMP"))
   {
@@ -3133,8 +3167,13 @@ static void bg_BakeFree(void)
   for (k = 0; k < num_sl; ++k)
   {
     free(sl[k].floor.v);
+    free(sl[k].floor.sec);
     free(sl[k].ceil.v);
   }
+  free(sunfill);
+  sunfill = NULL;
+  sunfill_n = 0;
+  sunfill_any = false;
   free(sl);
   sl = NULL;
   num_sl = 0;
@@ -3290,6 +3329,47 @@ static double bg_GridAt(const bg_grid_t* G, double x, double y)
   a = p[0] + (p[1] - p[0]) * ux;
   b = p[G->w] + (p[G->w + 1] - p[G->w]) * ux;
   return (a + (b - a) * uy) * (1.0 / 255.0);
+}
+
+// the same, for a point known to lie in sector `sec`: only the samples that lie in that sector count, so a wall's shadow
+// ends at the wall instead of bleeding across it (a grid without sector numbers is read as before)
+static double bg_GridAtSec(const bg_grid_t* G, double x, double y, int sec)
+{
+  double st, fx, fy, ux, uy, w[4], sum = 0, val = 0, all;
+  int ix, iy, k;
+  const byte* p;
+  const unsigned short* q;
+  size_t o;
+
+  if (!G->sec || sec < 0)
+    return bg_GridAt(G, x, y);
+  st = G->step > 0 ? G->step : BG_FLAT_STEP;
+  fx = (x - G->x0) / st;
+  fy = (y - G->y0) / st;
+  ix = (int) floor(fx);
+  iy = (int) floor(fy);
+  if (!G->v || ix < 0 || iy < 0 || ix >= G->w - 1 || iy >= G->h - 1)
+    return 0;
+  ux = fx - ix;
+  uy = fy - iy;
+  o = (size_t) iy * G->w + ix;
+  p = G->v + o;
+  q = G->sec + o;
+  w[0] = (1 - ux) * (1 - uy); w[1] = ux * (1 - uy); w[2] = (1 - ux) * uy; w[3] = ux * uy;
+  all = (p[0] * w[0] + p[1] * w[1] + p[G->w] * w[2] + p[G->w + 1] * w[3]) * (1.0 / 255.0);
+  for (k = 0; k < 4; ++k)
+  {
+    int idx = (k & 1) + (k >> 1) * G->w;
+
+    if (q[idx] == sec + 1)
+    {
+      sum += w[k];
+      val += w[k] * p[idx];
+    }
+  }
+  if (sum < 1e-6)
+    return all;                 // none of the four samples is in this sector (a thin one): the plain blend
+  return val / sum * (1.0 / 255.0);
 }
 
 // is there baked floor light near this point at all? (used to keep things in shadow dark)
@@ -4256,7 +4336,16 @@ static void bg_SpanLevel(void* c, int x, bg_level_t* out)
   for (i = 0; i < k->nst; ++i)
   {
     const bg_slight_t* S = k->st[i];
-    double v = bg_GridAt(k->ceiling ? &S->ceil : &S->floor, px, py) * S->flick;
+    double v;
+
+    if (S->sun && !k->ceiling)
+    {
+      const subsector_t* ssn = R_PointInSubsector((fixed_t) (px * 65536.0), (fixed_t) (py * 65536.0));
+
+      v = bg_GridAtSec(&S->floor, px, py, ssn ? (int) (ssn->sector - sectors) : -1) * S->flick;
+    }
+    else
+      v = bg_GridAt(k->ceiling ? &S->ceil : &S->floor, px, py) * S->flick;
 
     bg_AccAdd(&a, v > 0.98 ? 0.98 : v, S->g.col);
   }
@@ -4393,7 +4482,7 @@ static const lighttable_t* bg_LightAt(const lighttable_t* colormap, double fx, d
       const bg_slight_t* S = &sl[sv[i]];
 
       if (S->sun)
-        bg_AccAdd(&a, bg_GridAt(&S->floor, fx, fy), S->g.col);
+        bg_AccAdd(&a, bg_GridAtSec(&S->floor, fx, fy, s), S->g.col);
       else if (bg_GridAny(&S->floor, fx, fy))
         bg_AccAdd(&a, bg_Contribution(&S->g, fx, fy, fz, n), S->g.col);
     }

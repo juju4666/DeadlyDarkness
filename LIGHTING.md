@@ -278,6 +278,7 @@ sun map MAP01 angle 250 elevation 50 color sunlight strength 0.9
 | `elevation` | how high it is above the horizon, 3 (low, long shadows) to 89 (overhead)              | 40             |
 | `color`     | a colour defined with `color NAME R G B`                                              | white          |
 | `strength`  | how bright it is on a surface that faces it squarely                                  | 0.9            |
+| `bounce`    | ambient light the sun gives every sector it reaches (0 to 0.9): the fill is `bounce` times the square root of the share of the sector's floor in direct sun, in the sun's colour, over the whole sector, shadows included. A garage with a patch of sun in it is lit all over, softly; a sector the sun never reaches stays dark; an open yard's shadows are no longer black. Needs the "Light Bounce" menu option on. | 0 (none)       |
 
 What it lights: a floor or wall point is in the sun when a ray from it toward the sun gets out. **A sector whose
 ceiling is a sky flat is open to the sun; any other ceiling stops it.** Walls and pillars cast shadows (a one-sided
