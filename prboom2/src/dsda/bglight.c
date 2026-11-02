@@ -2955,15 +2955,40 @@ static void bg_BakeSun(void)
 
       if (fabs(x) > 32000.0 || fabs(y) > 32000.0)
         continue;
-      ss = R_PointInSubsector((fixed_t) (x * 65536.0), (fixed_t) (y * 65536.0));
-      if (!ss)
-        continue;
-      c = bg_Contribution(&S->g, x, y, bg_Fix(ss->sector->floorheight), n);
-      if (c <= 0 || !bg_SunReaches(&los, ss->sector, x, y, bg_Fix(ss->sector->floorheight) + 1.0, maxz, s3))
-        continue;
+      // A sample that lies exactly on a sector's edge belongs to whichever sector the node builder picks, which made a dark
+      // seam along doorways and garage mouths (the ray started "inside" the roofed sector). Take the point a hair toward
+      // the sun instead: the sector the light would be coming from.
+      {
+        double nx = x, ny = y;
+        double hl = hypot(s3[0], s3[1]);
+
+        if (hl > 1e-9)
+        {
+          nx = x + 0.5 * s3[0] / hl;
+          ny = y + 0.5 * s3[1] / hl;
+        }
+        ss = R_PointInSubsector((fixed_t) (nx * 65536.0), (fixed_t) (ny * 65536.0));
+        if (!ss)
+          continue;
+        c = bg_Contribution(&S->g, x, y, bg_Fix(ss->sector->floorheight), n);
+        if (c <= 0 || !bg_SunReaches(&los, ss->sector, nx, ny, bg_Fix(ss->sector->floorheight) + 1.0, maxz, s3))
+          continue;
+      }
       S->floor.v[(size_t) j * w + i] = (byte) (c * 255.0 + 0.5);
     }
 
+  if (getenv("BEGOTTEN_SUNDUMP"))
+  {
+    FILE* f = fopen(getenv("BEGOTTEN_SUNDUMP"), "wb");
+
+    if (f)
+    {
+      fprintf(f, "P5\n%d %d\n255\n", w, h);
+      fwrite(S->floor.v, 1, (size_t) w * h, f);
+      fclose(f);
+      fprintf(stderr, "SUNDUMP x0 %g y0 %g step %g w %d h %d\n", S->floor.x0, S->floor.y0, step, w, h);
+    }
+  }
   // walls facing the sun
   for (sn = 0; sn < numsegs; ++sn)
   {

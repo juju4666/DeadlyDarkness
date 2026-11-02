@@ -1226,3 +1226,8 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 
 - MAP01's sun moved to `angle 340 elevation 30` (20 degrees south of east), so its shadows no longer run parallel to the walls (`BGLIGHT` lump in `begotten.wad`, and `make_placeholder_content.py`).
 - **The first-person hands are lit by the level's lights** (`R_DrawPSprite`, `r_things.c`): they used the plain sector light level, so sun shadows and coloured lights never reached them. They now take `bg_LightSprite` at the eye, like a monster standing there: in the sun they are bright and warm, in a shadow they darken with the place. Fullbright frames (the muzzle flash, fixed colormaps such as a power-up) are left as they were. Monsters and other things already took the sun's shadows (`bg_LightAt` samples the sun's floor grid); only the hands were missing. Rendering only; no sim change.
+
+## 0.15.10 - dark seam at sector edges in the sun
+
+- **Fixed: a dark line of sun-less floor along the edge between two sectors** (a garage mouth, a doorway), reported with a Hexen-format MAP01. The sun bake samples the floor on a grid; a sample lying exactly on a sector's edge was assigned to whichever sector the nodes chose, and when that was the roofed one (the garage) the ray began "under a ceiling" and the whole 8-unit cell stayed dark, though the floor on both sides was lit. The bake now looks up the sector a hair (0.5 unit) toward the sun and starts the ray there (`bg_BakeSun`).
+- Developer aid: `BEGOTTEN_SUNDUMP=file.pgm` writes the sun's floor grid (one byte per cell, bottom row first; origin, step and size go to stderr as `SUNDUMP`).
