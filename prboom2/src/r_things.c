@@ -739,6 +739,13 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
 
   // Begotten: a model is as big as its body, not a point: it is kept while any part of it can show
   margin = (bg_weapons && !thing->player && bgvox_IsModel(thing)) ? thing->radius * 2 : 0;
+  if (margin)
+  {
+    fixed_t reach = bgvox_ModelReach(thing);     // a long model (a tank's hull or turret) reaches far beyond its radius
+
+    if (reach > margin)
+      margin = reach;
+  }
   // thing is behind view plane?
   if (tz + margin < r_near_clip_plane)
     return;
@@ -786,6 +793,29 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
       vv->gz = vgz;
       vv->gzt = vgzt;
       vv->scale = vscale;
+      if (bg_weapons)
+      {
+        // a tank's turret is drawn after its hull whatever the angle: their depth keys, taken from the middle of each box, swap
+        // order as the view turns, and a turret drawn first is painted over by the hull
+        mobj_t* hull = bgveh_HullOfTurret(thing);
+        fixed_t hs = 0;
+
+        if (hull)
+        {
+          fixed_t hx = hull->x, hy = hull->y, hz = hull->z;
+
+          if (R_ViewInterpolation())
+          {
+            hx = hull->PrevX + FixedMul(tic_vars.frac, hull->x - hull->PrevX);
+            hy = hull->PrevY + FixedMul(tic_vars.frac, hull->y - hull->PrevY);
+            hz = hull->PrevZ + FixedMul(tic_vars.frac, hull->z - hull->PrevZ);
+          }
+          bg_ViewShift(hull, viewx, viewy, &hx, &hy);
+          hs = bgvox_SortScale(hull, hx, hy, hz);
+        }
+        if (hs && vv->scale <= hs + 64)
+          vv->scale = hs + 64;
+      }
       vv->heightsec = thing->subsector->sector->heightsec;
       vv->mobjflags = thing->flags;
       vv->floorclip = 0;

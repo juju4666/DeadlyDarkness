@@ -18,6 +18,8 @@
 // the vehicle this player is in (NULL: on foot)
 mobj_t* bgveh_VehicleOf(const mobj_t* rider);
 dboolean bgveh_Mounted(const player_t* player);
+int bgveh_HeadlightKind(const mobj_t* v);          // 1 bike, 2 mecha, 3 tank (hull) with somebody in it, else 0
+mobj_t* bgveh_HullOfTurret(const mobj_t* turret);   // the hull a turret sits on, NULL if this is not a turret
 
 // the Use key: get in (a vehicle is within reach) or out; true = the key was used up
 dboolean bgveh_Use(player_t* player);

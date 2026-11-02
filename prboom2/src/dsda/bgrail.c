@@ -426,6 +426,6 @@ dboolean bgrail_Control(player_t* player)
   if (!(leveltime & 7))
     S_StartMobjSound(mo, sfx_stnmov);
   if (getenv("BEGOTTEN_VEHDEBUG") && !(leveltime & 7))
-    fprintf(stderr, "RAIL on line %d at %d %d z %d speed %.1f\n", (int) (l - lines), mo->x >> 16, mo->y >> 16, mo->z >> 16, speed / 65536.0);
+    fprintf(stderr, "RAIL on line %d at %d %d z %d speed %.1f angle %d pitch %d\n", (int) (l - lines), mo->x >> 16, mo->y >> 16, mo->z >> 16, speed / 65536.0, (int) (mo->angle / (double) ANG1), (int) ((int) mo->pitch / (double) ANG1));
   return true;
 }

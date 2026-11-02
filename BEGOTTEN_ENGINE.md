@@ -1186,3 +1186,18 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 - **Reflected projectiles and shots already do double damage** (`BG_PARRY_DAMAGE_PCT 200`, also for parried hitscan; covered by the parry self test), unchanged.
 - Developer aids: `BEGOTTEN_TELEPORT2="x y angle"` and `BEGOTTEN_CLASS2=n` (player 2's place and class in a split-screen test).
 - `BGNET_SIM_REV` is 13: the rails, the bike gun and the empty-bike crash change the simulation, so 0.15.3 and 0.15.4 machines cannot play together.
+
+## 0.15.5 - vehicle headlights, tank turret drawing, rail checks
+
+- **Headlights** while somebody is in the vehicle: one on the motorcycle, two on the front of the tank's hull, two on the mecha's shoulders (`bg_VehicleHeadlights` in `bglight.c`,
+  `bgveh_HeadlightKind` in `bgvehicle.c`). Warm white cones along the heading (14-16 degrees full, 34-40 degrees fading out, 640-700 units, 3 degrees down), no shadows.
+  Placement: bike 30 ahead and 26 up; mecha 12 ahead, 24 to each side, 74 up; tank 50 ahead, 22 to each side, 32 up (edit the numbers in `bg_VehicleHeadlights`).
+  Parked, empty vehicles have their lights off. Drawing only: nothing in the simulation changed (simulation revision stays 13).
+- **The tank's turret vanished at some angles** (found from the user's two screenshots of the same view turned slightly): the turret and the hull are two voxel models,
+  each drawn into a private depth buffer and then sorted like sprites by the depth of the middle of their boxes; as the view turned the two keys swapped, the turret was
+  drawn first and the hull painted over it. A turret now takes its hull's depth key (plus a little), so it is always drawn after the hull (`bgvox_SortScale`, `bgveh_HullOfTurret`, `r_things.c`).
+- **Models are kept while any part can show:** the margin for the behind-the-view and off-the-side tests is now the model's real horizontal reach (`bgvox_ModelReach`), not
+  twice the thing's radius, which was far too small for the tank's long hull and turret.
+- **Rails, checked with real mouse events** (xdotool in a virtual display): the facing follows the mouse while grinding and does not change on the rail's corners; the rail
+  only decides where he goes. `BEGOTTEN_VEHDEBUG=1` now prints the angle and pitch with every `RAIL on line ...` line.
+- Test aids: `LIGHT=n` (room light level) in `tools/make_vehicle_test_map.py`.

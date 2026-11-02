@@ -67,6 +67,7 @@
 #include "dsda/bgclass.h"
 #include "dsda/bglight.h"
 #include "dsda/bgrail.h"
+#include "dsda/bgvehicle.h"
 #include "dsda/bgcolor.h"
 #include "dsda/bgmonster.h"
 #include "s_sound.h"
@@ -1064,6 +1065,39 @@ static void bg_LimitEffectShadows(void)
   }
 }
 
+// Headlights: a motorcycle has one, a tank two at the front of the hull, a mecha two on its shoulders. Cones along the heading,
+// warm white, on while somebody is in the vehicle. No shadows (a vehicle is a big thing and its lights are many).
+static void bg_VehicleHeadlights(const mobj_t* mo, int kind)
+{
+  static const double warm[3] = { 1.0, 0.93, 0.75 };
+  double x, y, z, a, fx, fy;
+  bg_lightdef_t tmp;
+  int n, i;
+  double fwd, side, high;
+
+  bg_MobjPos(mo, &x, &y, &z);
+  a = (double) mo->angle * (2.0 * M_PI / 4294967296.0);
+  fx = cos(a);
+  fy = sin(a);
+  if (kind == 1)       { n = 1; fwd = 30.0; side = 0.0;  high = 26.0; }      // bike: one lamp at the front of the fork
+  else if (kind == 2)  { n = 2; fwd = 12.0; side = 24.0; high = 74.0; }      // mecha: on the shoulders
+  else                 { n = 2; fwd = 50.0; side = 22.0; high = 32.0; }      // tank: front of the hull
+  tmp = dyn_flashlight;
+  tmp.radius = kind == 1 ? 640 : 700;
+  tmp.strength = kind == 1 ? 1.0 : 0.8;
+  tmp.spot_inner = kind == 1 ? 16 : 14;
+  tmp.spot_outer = kind == 1 ? 40 : 34;
+  tmp.pitch = -3.0;
+  tmp.shadow = false;
+  tmp.side = tmp.drop = 0.0;
+  for (i = 0; i < n; ++i)
+  {
+    double s = n == 1 ? 0.0 : (i ? side : -side);
+
+    bg_AddLight(&tmp, mo, x + fwd * fx + s * fy, y + fwd * fy - s * fx, z + high, a, (unsigned) (mo->x >> 16) + (unsigned) i, warm);
+  }
+}
+
 static void bg_AddDynamicLights(void)
 {
   thinker_t* th;
@@ -1085,6 +1119,13 @@ static void bg_AddDynamicLights(void)
     if ((first_type >= 0 && mo->type >= first_type && mo->type < first_type + num_defs) || mo->type < 0 ||
         mo->type >= num_mobj_types || !mo->state)
       continue;
+    if (bg_weapons && mo->type >= 0)
+    {
+      int hk = bgveh_HeadlightKind(mo);
+
+      if (hk)
+        bg_VehicleHeadlights(mo, hk);
+    }
     if (bgvox_FrameLight(mo, &vox_r, &vox_s, vox_col))
     {
       // a voxel prop's explosion or burning frame (BGVOXEL `light`): a flickering point light, tinted by the model

@@ -33,7 +33,7 @@ def build():
     out += ['linedef { v1 = %d; v2 = %d; sidefront = %d; blocking = true; }' % l for l in lines]
     out += ['linedef { v1 = %d; v2 = %d; sidefront = %d; sideback = %d; twosided = true; special = 300; arg0 = %d; arg1 = %d; }' % r for r in rails]
     out += ['sidedef { sector = %d; texturemiddle = "%s"; }' % (s['sector'], s['tex']) for s in sides]
-    out.append('sector { heightfloor = 0; heightceiling = 320; texturefloor = "FLOOR2"; textureceiling = "CEIL1"; lightlevel = 170; }')
+    out.append('sector { heightfloor = 0; heightceiling = 320; texturefloor = "FLOOR2"; textureceiling = "CEIL1"; lightlevel = %d; }' % int(os.environ.get('LIGHT', 170)))
     def thing(t, x, y, a=0):
         out.append('thing { x = %d.0; y = %d.0; angle = %d; type = %d; skill1 = true; skill2 = true; skill3 = true; skill4 = true; '
                    'skill5 = true; single = true; coop = true; dm = true; class1 = true; class2 = true; class3 = true; }' % (x, y, a, t))

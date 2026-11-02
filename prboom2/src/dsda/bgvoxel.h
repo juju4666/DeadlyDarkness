@@ -27,6 +27,8 @@ void bgvox_NewLevel(void);
 // every frame, after the view is set up
 void bgvox_BeginFrame(void);
 
+fixed_t bgvox_ModelReach(const mobj_t* thing);   // how far any part of the model reaches from the thing (horizontal), 0 = not a model
+fixed_t bgvox_SortScale(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz);    // the sort key of a model without keeping it (0: not drawn)
 dboolean bgvox_IsModel(const mobj_t* thing);   // drawn as a model (no sprite)
 
 // Is this thing drawn as a voxel model? If so, makes this frame's instance of it and returns its number + 1, with its

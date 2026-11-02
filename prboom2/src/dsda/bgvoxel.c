@@ -1152,6 +1152,34 @@ dboolean bgvox_IsModel(const mobj_t* thing)
   return p && f >= 0 && f <= 3 && p->fr[f].model >= 0;
 }
 
+// How far any part of the model can be from the thing's position, horizontally (map units, fixed): the model's own size, not
+// the thing's radius, which is much smaller for a long model such as a tank's hull or turret (0 = not a model)
+fixed_t bgvox_ModelReach(const mobj_t* thing)
+{
+  const vprop_t* p;
+  const vmodel_t* m;
+  double vs, a, b, w, h;
+  int f;
+
+  if (!num_props || !thing->state || thing->player)
+    return 0;
+  p = prop_of_sprite(thing->state->sprite);
+  f = thing->state->frame & 0x7fff;
+  if (!p || f < 0 || f > 3 || p->fr[f].model < 0)
+    return 0;
+  m = vox_Get(p->fr[f].model);
+  if (!m)
+    return 0;
+  vs = 1.0 / bg_Fix(bg_scale_sprites);
+  a = m->orgx * vs;
+  b = (m->sx - m->orgx) * vs;
+  w = a > b ? a : b;
+  a = m->orgy * vs;
+  b = (m->sy - m->orgy) * vs;
+  h = a > b ? a : b;
+  return (fixed_t) ((sqrt(w * w + h * h) + sqrt(p->offx * p->offx + p->offy * p->offy)) * 65536.0);
+}
+
 int bgvox_Project(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz, int* x1, int* x2, fixed_t* scale,
                   fixed_t* gz, fixed_t* gzt)
 {
@@ -1280,6 +1308,22 @@ int bgvox_Project(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz, int* 
   I->sector = NULL;
   ++num_inst;
   return num_inst;
+}
+
+// The depth key a model gets for sorting (what bgvox_Project would hand back), without keeping the instance; 0 if the model is not
+// drawn. A tank's turret takes its hull's key so that it is always drawn after the hull it sits on.
+fixed_t bgvox_SortScale(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz)
+{
+  int x1, x2, ok;
+  fixed_t sc = 0, gz, gzt;
+
+  if (num_inst >= BGVOX_MAXINST)
+    return 0;
+  ok = bgvox_Project(thing, fx, fy, fz, &x1, &x2, &sc, &gz, &gzt);
+  if (!ok)
+    return 0;
+  --num_inst;
+  return sc;
 }
 
 void bgvox_SetBase(int inst_no, const lighttable_t* colormap, const sector_t* sector)

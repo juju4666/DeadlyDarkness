@@ -374,6 +374,34 @@ static dboolean dismount(player_t* player, dboolean destroyed, dboolean force)
 
 // a rider thrown out of a destroyed vehicle is safe for a moment: the explosion comes a few tics after the vehicle is
 // destroyed, and it was killing the one it had just thrown out
+static dboolean occupied(const mobj_t* v);
+
+// 1 motorcycle, 2 mecha, 3 tank hull when somebody is in it (its headlights are on); 0 for anything else
+int bgveh_HeadlightKind(const mobj_t* v)
+{
+  const kind_t* k = kind_of(v);
+  mobj_t* tu;
+
+  if (!k || k == K_TURRET || v->health <= 0)
+    return 0;
+  if (k == K_TANK)
+  {
+    tu = turret_of((mobj_t*) v);
+    if (!occupied(v) && !(tu && occupied(tu)))
+      return 0;
+    return 3;
+  }
+  if (!occupied(v))
+    return 0;
+  return k->maxside == 0 ? 1 : 2;
+}
+
+// the hull a tank's turret sits on (NULL for anything else)
+mobj_t* bgveh_HullOfTurret(const mobj_t* t)
+{
+  return kind_of(t) == K_TURRET && t->target && is_live(t->target) ? t->target : NULL;
+}
+
 dboolean bgveh_Shielded(const mobj_t* rider)
 {
   return rider && rider->player && rider->bg_cd > 0;
