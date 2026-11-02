@@ -21,9 +21,17 @@ def build():
     loop(rect(0, 0, 2048, 2048), 0)
     loop(hole(900, 800, 964, 864), 0, 'WALL05')
     loop(hole(1300, 1300, 1364, 1364), 0, 'WALL05')
+    # env RAILS='x1 y1 x2 y2 [height [speed]];...' : grind rails (special 300), two-sided lines inside the room
+    rails = []
+    for e in filter(None, os.environ.get('RAILS', '').split(';')):
+        v = [int(q) for q in e.split()]
+        sides.append(dict(sector=0, tex='-')); f = len(sides) - 1
+        sides.append(dict(sector=0, tex='-')); b = len(sides) - 1
+        rails.append((vid((v[0], v[1])), vid((v[2], v[3])), f, b, v[4] if len(v) > 4 else 0, v[5] if len(v) > 5 else 0))
     out = ['namespace = "zdoom";']
     out += ['vertex { x = %d.0; y = %d.0; }' % p for p in V]
     out += ['linedef { v1 = %d; v2 = %d; sidefront = %d; blocking = true; }' % l for l in lines]
+    out += ['linedef { v1 = %d; v2 = %d; sidefront = %d; sideback = %d; twosided = true; special = 300; arg0 = %d; arg1 = %d; }' % r for r in rails]
     out += ['sidedef { sector = %d; texturemiddle = "%s"; }' % (s['sector'], s['tex']) for s in sides]
     out.append('sector { heightfloor = 0; heightceiling = 320; texturefloor = "FLOOR2"; textureceiling = "CEIL1"; lightlevel = 170; }')
     def thing(t, x, y, a=0):
@@ -33,7 +41,7 @@ def build():
     thing(2, int(os.environ.get('PX', 256)), int(os.environ.get('PY', 1024)) + 60, int(os.environ.get('PANG', 0)))
     thing(21201, 400, 900, 0)
     thing(21202, 400, 1200, 0)
-    for k in range(6): thing(3001, 1500, 300 + 250 * k, 180)
+    for k in range(0 if os.environ.get('NOIMPS') else 6): thing(3001, 1500, 300 + 250 * k, 180)
     for e in filter(None, os.environ.get('EXTRA', '').split(';')):
         v = [int(q) for q in e.split()]
         thing(v[0], v[1], v[2], v[3] if len(v) > 3 else 0)

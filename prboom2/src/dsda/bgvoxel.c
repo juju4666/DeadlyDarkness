@@ -826,7 +826,8 @@ static void vox_BuildProp(vprop_t* p)
 
   p->sprite = dsda_AddSpriteName(p->sprname);
   // the tank hull looks after its turret every tic (bgvehicle.c)
-  p->idle = vox_State(p->sprite, 0, p->vehicle == 3 ? 1 : -1, p->vehicle == 3 ? ACT(bgveh_A_TankThink) : NULL);
+  p->idle = vox_State(p->sprite, 0, (p->vehicle == 3 || p->vehicle == 1) ? 1 : -1,
+                      p->vehicle == 3 ? ACT(bgveh_A_TankThink) : p->vehicle == 1 ? ACT(bgveh_A_Coast) : NULL);
   p->death0 = vox_State(p->sprite, 1, 4, ACT(A_Scream));
   p->death1 = vox_State(p->sprite, 1, 1, ACT(A_Explode));
   {

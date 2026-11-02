@@ -46,6 +46,8 @@ dboolean bgveh_WantsTracks(const player_t* player);
 
 // the tank hull's state actions (see bgvoxel.c)
 void bgveh_A_TankThink(mobj_t* hull);
+void bgveh_A_Coast(mobj_t* vehicle);
+dboolean bgveh_Shielded(const mobj_t* rider);   // thrown out of a destroyed vehicle a moment ago: takes no damage
 void bgveh_A_TankWreck(mobj_t* wreck);
 
 // developer aid (BEGOTTEN_VEHTEST): plays player 1's controls from a script

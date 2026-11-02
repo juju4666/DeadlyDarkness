@@ -225,6 +225,7 @@ set(COMMON_SRC
   dsda/bgroster.c
   dsda/bgvoxel.c
   dsda/bgvehicle.c
+  dsda/bgrail.c
   dsda/bgface.c
   dsda/bgending.c
   dsda/bgprogress.c

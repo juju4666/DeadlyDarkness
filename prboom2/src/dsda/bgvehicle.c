@@ -29,6 +29,7 @@
 #include "dsda/excmd.h"
 #include "dsda/messenger.h"
 #include "dsda/bgvoxel.h"
+#include "dsda/bgclass.h"
 #include "dsda/bgvehicle.h"
 
 extern fixed_t bulletslope;
@@ -60,7 +61,7 @@ static const kind_t kinds[KIND_COUNT] =
   // motorcycle: fast, loose, turns wide at speed
   { "MOTORCYCLE", 26, F(30, 0), F(6, 0), 0, F(0, 85), F(3, 0), ((fixed_t) (986 * FRACUNIT / 1000)), F(0, 80), 5, 2, 12, 70 },
   // mecha: slow, heavy, strafes, stops almost at once, turns slowly
-  { "MECHA", 84, F(9, 50), F(6, 0), F(6, 50), F(0, 28), F(0, 0), F(0, 0), F(0, 0), 4, 4, 5, 25 },
+  { "MECHA", 84, F(4, 75), F(3, 0), F(3, 25), F(0, 28), F(0, 0), F(0, 0), F(0, 0), 4, 4, 3, 25 },
   // tank hull (the driver's seat): see tank_drive. Wheels style: heavy car (accel, brake, roll, grip, turn); the
   // maxside of 0 only means "no strafing"
   { "TANK", 46, F(7, 50), F(3, 50), 0, F(0, 20), F(0, 45), ((fixed_t) (985 * FRACUNIT / 1000)), F(0, 86), 1, 2, 3, 60 },
@@ -68,6 +69,7 @@ static const kind_t kinds[KIND_COUNT] =
   { "TANK GUNNER", 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
+#define SHIELD_TICS 20     // a rider thrown out of a wreck takes no damage for this long
 #define TANK_DECK 22       // height of the turret ring above the hull's floor, map units
 #define TANK_DRIVER 38     // the driver's eye is this far ahead of the hull's centre
 #define TANK_LOOK 12743    // furthest he can look away from straight ahead (70 degrees, in angleturn units)
@@ -253,6 +255,7 @@ static void mount(player_t* player, mobj_t* v)
     body = v;
   P_SetTarget(&rider->tracer, v);
   P_SetTarget(&v->tracer, rider);
+  v->special1.i = P_AproxDistance(v->momx, v->momy);      // the bike's crash check starts from the speed it has now
   rider->angle = v->angle;
   rider->flags &= ~(MF_SOLID | MF_SHOOTABLE);
   rider->flags |= MF_NOGRAVITY;
@@ -361,11 +364,87 @@ static dboolean dismount(player_t* player, dboolean destroyed, dboolean force)
   rider->momy = v->momy / 2;
   if (destroyed)
   {
+    rider->bg_cd = SHIELD_TICS;
     rider->momz = 5 * FRACUNIT;
     P_DamageMobj(rider, NULL, NULL, 15 + P_Random(pr_misc) % 15);
   }
   S_StartMobjSound(rider, sfx_swtchn);
   return true;
+}
+
+// a rider thrown out of a destroyed vehicle is safe for a moment: the explosion comes a few tics after the vehicle is
+// destroyed, and it was killing the one it had just thrown out
+dboolean bgveh_Shielded(const mobj_t* rider)
+{
+  return rider && rider->player && rider->bg_cd > 0;
+}
+
+// an empty vehicle rolls on instead of stopping dead (the engine's floor friction alone would stop it in a few tics)
+static void coast(mobj_t* v, const kind_t* k)
+{
+  fixed_t vx, vy;
+
+  if (!k->roll || v->z > v->floorz || v->friction <= 0)
+    return;
+  vx = FixedMul(FixedDiv(v->momx, v->friction), k->roll);
+  vy = FixedMul(FixedDiv(v->momy, v->friction), k->roll);
+  v->momx = vx;
+  v->momy = vy;
+}
+
+static dboolean occupied(const mobj_t* v)
+{
+  return v->tracer && is_live(v->tracer) && v->tracer->tracer == v;
+}
+
+static void ram(mobj_t* v, mobj_t* rider, const kind_t* k, fixed_t speed, fixed_t fc, fixed_t fs);
+
+// a bike nobody rides is still a bike going fast: it hurts what it hits, and it is hurt, harder than with a rider,
+// by what it hits. A rider can bail out and throw it at something.
+#define EMPTY_CRASH_FACTOR 6
+
+static void empty_bike(mobj_t* v, const kind_t* k)
+{
+  dboolean ground = v->z <= v->floorz && v->friction > 0;
+  fixed_t vx = v->momx, vy = v->momy, speed, lost;
+
+  if (ground)
+  {
+    vx = FixedDiv(vx, v->friction);
+    vy = FixedDiv(vy, v->friction);
+  }
+  speed = P_AproxDistance(vx, vy);
+  lost = v->special1.i - speed;
+  v->special1.i = speed;
+  if (lost > 9 * FRACUNIT && v->health > 0)
+  {
+    if (getenv("BEGOTTEN_VEHDEBUG"))
+      fprintf(stderr, "VEH empty bike crash: lost %.1f hp %d\n", lost / 65536.0, v->health);
+    P_DamageMobj(v, NULL, NULL, (lost >> FRACBITS) * EMPTY_CRASH_FACTOR);
+    S_StartMobjSound(v, sfx_oof);
+    if (v->health <= 0)
+      return;
+  }
+  if (speed >= k->ramspeed * FRACUNIT)
+  {
+    fixed_t fc = FixedDiv(vx, speed), fs = FixedDiv(vy, speed);
+
+    ram(v, NULL, k, speed, fc, fs);
+    if (ground)
+      v->special1.i = P_AproxDistance(FixedDiv(v->momx, v->friction), FixedDiv(v->momy, v->friction));
+  }
+}
+
+void bgveh_A_Coast(mobj_t* v)
+{
+  const kind_t* k = kind_of(v);
+
+  if (k && !occupied(v))
+  {
+    if (k->maxside == 0)
+      empty_bike(v, k);
+    coast(v, k);
+  }
 }
 
 dboolean bgveh_Use(player_t* player)
@@ -394,6 +473,11 @@ dboolean bgveh_Use(player_t* player)
             player->mo->z >> 16, (unsigned) player->mo->angle, use_best ? "found" : "none near");
   if (!use_best)
     return false;
+  if (player->bgclass == bg_ClassFromWord("swordsman"))
+  {
+    dsda_AddPlayerMessage("The swordsman does not ride. Grind the rails instead.", player);
+    return true;
+  }
   mount(player, pick_seat(player, use_best));
   return true;
 }
@@ -478,6 +562,32 @@ static void ram(mobj_t* v, mobj_t* rider, const kind_t* k, fixed_t speed, fixed_
 }
 
 // the mecha's weapons: a cannon on the primary fire, a rocket on the alt fire
+// the motorcycle's machinegun: infinite, a burst every 3 tics on either fire key. special1 is its crash memory, so
+// the cooldown is in special2
+static void bike_fire(player_t* player, mobj_t* v, mobj_t* rider)
+{
+  const ticcmd_t* cmd = &player->cmd;
+
+  if (v->special2.i > 0)
+    --v->special2.i;
+  if (((cmd->buttons & BT_ATTACK) || (cmd->ex.actions & XC_ALT)) && v->special2.i == 0)
+  {
+    int damage = 5 + 5 * (P_Random(pr_gunshot) % 3);
+    int t = P_Random(pr_misfire);
+    angle_t angle = rider->angle + ((t - P_Random(pr_misfire)) << 18);
+    fixed_t oldz = rider->z;
+
+    v->special2.i = 3;
+    rider->z = v->z + 28 * FRACUNIT;
+    P_BulletSlope(rider);
+    P_LineAttack(rider, angle, MISSILERANGE, bulletslope, damage);
+    rider->z = oldz;
+    S_StartMobjSound(rider, sfx_pistol);
+    if (getenv("BEGOTTEN_VEHDEBUG"))
+      fprintf(stderr, "VEH bike gun fired slope %d\n", bulletslope);
+  }
+}
+
 static void mecha_fire(player_t* player, mobj_t* v, mobj_t* rider)
 {
   const ticcmd_t* cmd = &player->cmd;
@@ -765,6 +875,8 @@ void bgveh_A_TankThink(mobj_t* hull)
   tu->z = hull->z + TANK_DECK * FRACUNIT;
   tu->floorz = hull->floorz;
   tu->ceilingz = hull->ceilingz;
+  if (!occupied(hull))
+    coast(hull, K_TANK);
   if (hull->movecount > 0)
     --hull->movecount;
   if (hull->strafecount > 0)
@@ -919,6 +1031,8 @@ dboolean bgveh_Control(player_t* player)
     ram(v, rider, k, P_AproxDistance(vx, vy), fc, fs);
   if (kind_of(v) == &kinds[KIND_MECHA])
     mecha_fire(player, v, rider);
+  else if (k->maxside == 0)
+    bike_fire(player, v, rider);
 
   // the weapon in the hands is out of the way
   player->attackdown = 0;
@@ -943,6 +1057,8 @@ void bgveh_PostTick(void)
     if (!playeringame[i] || !player->mo)
       continue;
     rider = player->mo;
+    if (rider->bg_cd > 0)
+      --rider->bg_cd;
     v = bgveh_VehicleOf(rider);
     if (!v)
     {
@@ -1084,7 +1200,7 @@ debug:
   {
     mobj_t* v = bgveh_VehicleOf(player->mo);
 
-    fprintf(stderr, "VEH p%d t=%d rider %d,%d,%d ang %d mounted %d", n + 1, leveltime, player->mo->x >> 16,
+    fprintf(stderr, "VEH p%d t=%d php %d rider %d,%d,%d ang %d mounted %d", n + 1, leveltime, player->health, player->mo->x >> 16,
             player->mo->y >> 16, player->mo->z >> 16, (int) (player->mo->angle / (ANG1 + 0.0)), v ? 1 : 0);
     if (v)
     {

@@ -1451,6 +1451,8 @@ void P_DamageMobj(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage)
   if (bg_weapons)
   {
     // Begotten vehicles: a blow at the rider hits the vehicle; the rider's own weapons do little to it
+    if (target->player && bgveh_Shielded(target))
+      return;
     if (target->player)
       target = bgveh_Redirect(target);
     if (source && source->player && bgveh_OwnVehicle(source, target))

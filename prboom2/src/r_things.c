@@ -698,6 +698,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
   fixed_t fx, fy, fz;
   fixed_t gxt, gyt;
   fixed_t tz, tz2;
+  fixed_t margin;
   int width;
 
   if (thing->flags2 & MF2_DONTDRAW)
@@ -736,9 +737,13 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
 
   tz = gxt-gyt;
 
+  // Begotten: a model is as big as its body, not a point: it is kept while any part of it can show
+  margin = (bg_weapons && !thing->player && bgvox_IsModel(thing)) ? thing->radius * 2 : 0;
   // thing is behind view plane?
-  if (tz < r_near_clip_plane)
+  if (tz + margin < r_near_clip_plane)
     return;
+  if (margin && tz < r_near_clip_plane)
+    tz = r_near_clip_plane;
 
   xscale = FixedDiv(projection, tz);
 
@@ -747,7 +752,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
   tx = -(gyt+gxt);
 
   // too far off the side?
-  if (D_abs(tx) > ((int64_t) tz << 2))
+  if (D_abs(tx) > (((int64_t) tz + margin) << 2))
     return;
 
   // Begotten: a voxel prop is drawn as a model, not as a picture. It goes through the same sorting and clipping.

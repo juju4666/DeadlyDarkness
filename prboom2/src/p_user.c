@@ -68,6 +68,7 @@
 #include "p_inter.h"
 #include "m_random.h"
 #include "dsda/bgvehicle.h"
+#include "dsda/bgrail.h"
 
 //
 // Movement.
@@ -761,7 +762,7 @@ void P_PlayerThink (player_t* player)
 
   if (player->mo->reactiontime)
     player->mo->reactiontime--;
-  else if (bg_weapons && bgveh_Control(player))
+  else if (bg_weapons && (bgveh_Control(player) || bgrail_Control(player)))
   {
     // Begotten: driving a vehicle (dsda/bgvehicle.c)
   }

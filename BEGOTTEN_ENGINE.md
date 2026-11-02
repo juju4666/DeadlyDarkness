@@ -1139,3 +1139,36 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
   far in one go did not notice a thin wall between, and ended up outside the map), the vehicle itself is not an obstacle, and
   if none of the eight places around it is free (a wall, a low ceiling, something standing there) he stays on and gets
   "No room to get off here." When he has to get off (he died, the vehicle blew up) he is put down anyway.
+
+## 0.15.2 - vehicle fixes
+
+- **Mecha** walks at half the speed (4.75 forward, 3 back, 3.25 sideways; it stomps from 3 units a tic).
+- **Thrown out of a destroyed vehicle** the rider takes no damage for 20 tics: the explosion comes a few tics after the vehicle is
+  destroyed and was killing the one it had just thrown out (the mecha firing rockets at a near wall, the bike).
+- **The bike's crash check** now starts from the speed it has when somebody gets on. Before, it remembered the speed from when the last
+  rider got off, so getting on again counted as hitting a wall at that speed and destroyed it.
+- **An empty motorcycle or tank rolls on** (it keeps 98.5% of its speed a tic) instead of stopping dead on the floor's friction.
+- **A model is kept while any part of it can show:** the tests that threw a thing away when its middle was behind the view or off to
+  the side now allow twice its radius, so a car no longer vanishes when its centre leaves the screen.
+
+## 0.15.3 - empty bikes, a bike gun, the swordsman's rails
+
+- **A motorcycle nobody rides still crashes, harder than with a rider:** the speed it loses in a hit counts 6 times in hit points (2 with
+  a rider; a head-on crash at top speed destroys it), and while it moves fast enough (12 units a tic) it rams whatever it passes like a
+  ridden one does. Bail out and throw it at something.
+- **The motorcycle has an infinite machinegun** on either fire key (a bullet every 3 tics, 5-15 damage, a little spread).
+- **The swordsman cannot ride vehicles** ("The swordsman does not ride. Grind the rails instead.").
+- **Grind rails (line special 300, `Begotten_GrindRail` in the UDB config):** a linedef with special 300 is a rail, for the swordsman only
+  (everybody else walks through it as through nothing). It needs no activation flag. Args: arg0 = height above the floor (0 = 24; above the
+  higher of the two floors), arg1 = speed in units a tic (0 = 26, 8-29). A rail is invisible: the mapper draws the guard rail, the line goes on it.
+  - *Hopping on:* jump (be in the air) within 28 units of a rail whose height is within about 28 units below to 6 above the feet. He is put
+    on the line and carried along it, in the direction he was moving (or facing).
+  - *Riding:* rails that meet at a vertex form a chain; at the end of a rail he goes on along the one that bends the least (not back on a sharp
+    turn). The speed is about a motorcycle's top speed; forward adds up to 4, back takes off up to 6 (smoothly), it never stops, and he can
+    shoot and swing the sword meanwhile. At the end of the chain he is thrown on with his speed and a small hop. A rail grab is not possible for 25 tics after leaving one.
+  - *Jumping off* (a new press of the jump key): the jump height is the class' height times `(12 + speed - 8) / 12` above 8 units a tic, so a slow jump is
+    the normal one and at 26 units a tic it is 2.5 times as high (140 units for the swordsman) and carries his speed along.
+  - State is in the player's thing (`special1` speed, `special2` line, direction and jump-key bits, `bg_cd` the re-grab delay), so saved games,
+    demos and network games need nothing more; the arithmetic is integer.
+  - `tools/make_rail_demo.py IN.wad OUT.wad` adds a rail course along the south and east of the Vehicle Hall (the shipped begotten.wad has it);
+    `RAILS='x1 y1 x2 y2 [h [speed]];...'` adds rails to `tools/make_vehicle_test_map.py`'s room (`NOIMPS=1` leaves out the imps).
