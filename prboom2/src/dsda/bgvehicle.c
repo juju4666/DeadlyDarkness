@@ -279,7 +279,23 @@ static void mount(player_t* player, mobj_t* v)
   }
 }
 
-static void dismount(player_t* player, dboolean destroyed)
+// walk the rider from where he is to (x, y) in small steps: a thing moved far in one go does not notice a thin wall
+// between the two places (the engine only looks at the walls near where it ends up)
+static dboolean walk_to(mobj_t* rider, fixed_t x, fixed_t y)
+{
+  fixed_t sx = rider->x, sy = rider->y;
+  int n = (int) (P_AproxDistance(x - sx, y - sy) / (6 * FRACUNIT)) + 1, i;
+
+  for (i = 1; i <= n; ++i)
+    if (!P_TryMove(rider, sx + (fixed_t) ((long long) (x - sx) * i / n), sy + (fixed_t) ((long long) (y - sy) * i / n), false))
+      return false;
+  return true;
+}
+
+// get off. Without `force` it does nothing and says false when there is no free place to stand beside the vehicle
+// (a wall in the way, a ceiling too low, something standing there); with it (the rider died, the vehicle blew up) he
+// is put down anyway.
+static dboolean dismount(player_t* player, dboolean destroyed, dboolean force)
 {
   mobj_t* rider = player->mo;
   mobj_t* seat = bgveh_VehicleOf(rider);
@@ -287,34 +303,57 @@ static void dismount(player_t* player, dboolean destroyed)
   int i;
   dboolean placed = false;
   fixed_t dist;
+  unsigned long long fl = rider->flags, fl2 = rider->flags2;
+  fixed_t rad = rider->radius, hgt = rider->height;
 
   rider->flags |= MF_SOLID | MF_SHOOTABLE;
   rider->flags &= ~MF_NOGRAVITY;
   rider->flags2 &= ~MF2_DONTDRAW;
   rider->radius = rider->info->radius;
   rider->height = rider->info->height;
-  P_SetTarget(&rider->tracer, NULL);
   if (!seat)
-    return;
+  {
+    P_SetTarget(&rider->tracer, NULL);
+    return true;
+  }
+  if (!v)
+    v = seat;
+  dist = v->radius + rider->radius + 4 * FRACUNIT;
+  {
+    unsigned long long vfl = v->flags;
+
+    v->flags &= ~MF_SOLID;                // the vehicle is not in the way of the one getting off it
+    for (i = 0; i < 8 && !placed; ++i)
+    {
+      // the left side first, then the right, behind and in front
+      static const int order[8] = { 2, 6, 4, 0, 3, 5, 1, 7 };
+      angle_t a = v->angle + (angle_t) order[i] * ANG45;
+      fixed_t x = v->x + FixedMul(dist, finecosine[a >> ANGLETOFINESHIFT]);
+      fixed_t y = v->y + FixedMul(dist, finesine[a >> ANGLETOFINESHIFT]);
+
+      put_rider(rider, seat);
+      rider->z = v->z;
+      placed = walk_to(rider, x, y);
+    }
+    v->flags = vfl;
+  }
+  if (!placed && !force)
+  {
+    // stay on: back to the seat as he was
+    rider->flags = fl;
+    rider->flags2 = fl2;
+    rider->radius = rad;
+    rider->height = hgt;
+    put_rider(rider, seat);
+    dsda_AddPlayerMessage("No room to get off here.", player);
+    return false;
+  }
+  P_SetTarget(&rider->tracer, NULL);
   P_SetTarget(&seat->tracer, NULL);
   if (kind_of(seat) == K_TANK)
   {
     seat->special1.i = seat->special2.i = 0;      // the tracks stop pulling; the look goes back to the front
     seat->bg_aux = 0;
-  }
-  if (!v)
-    v = seat;
-  dist = v->radius + rider->radius + 4 * FRACUNIT;
-  for (i = 0; i < 8 && !placed; ++i)
-  {
-    // the left side first, then the right, behind and in front
-    static const int order[8] = { 2, 6, 4, 0, 3, 5, 1, 7 };
-    angle_t a = v->angle + (angle_t) order[i] * ANG45;
-    fixed_t x = v->x + FixedMul(dist, finecosine[a >> ANGLETOFINESHIFT]);
-    fixed_t y = v->y + FixedMul(dist, finesine[a >> ANGLETOFINESHIFT]);
-
-    rider->z = v->z;
-    placed = P_TryMove(rider, x, y, false);
   }
   if (!placed)
     put_rider(rider, seat);
@@ -326,6 +365,7 @@ static void dismount(player_t* player, dboolean destroyed)
     P_DamageMobj(rider, NULL, NULL, 15 + P_Random(pr_misc) % 15);
   }
   S_StartMobjSound(rider, sfx_swtchn);
+  return true;
 }
 
 dboolean bgveh_Use(player_t* player)
@@ -337,7 +377,7 @@ dboolean bgveh_Use(player_t* player)
     return false;
   if (bgveh_VehicleOf(player->mo))
   {
-    dismount(player, false);
+    dismount(player, false, false);
     return true;
   }
   use_player = player;
@@ -812,8 +852,8 @@ dboolean bgveh_Control(player_t* player)
   topspeed = k->maxfwd;
   maxturn = (int) ((long long) k->turnslow * ANG1 +
                    ((long long) (k->turnfast - k->turnslow) * ANG1 * fclamp(speed, 0, topspeed)) / topspeed);
-  if (k->maxside == 0 && speed < FRACUNIT)
-    maxturn /= 3;                         // a motorcycle that is not moving cannot swing round
+  if (k->maxside == 0)
+    maxturn = (int) ((long long) maxturn * fclamp(speed, 0, 3 * FRACUNIT) / (3 * FRACUNIT));   // it steers by rolling: none at a standstill, full from 3 units a tic
   dturn = (int) (turn64 < -maxturn ? -maxturn : turn64 > maxturn ? maxturn : turn64);
   v->angle += (angle_t) dturn;
   rider->angle = v->angle;
@@ -910,19 +950,19 @@ void bgveh_PostTick(void)
       if (rider->tracer && (rider->flags & MF_NOGRAVITY) && !(rider->flags & MF_SOLID) && player->playerstate == PST_LIVE)
       {
         P_SetTarget(&rider->tracer, NULL);
-        dismount(player, false);
+        dismount(player, false, true);
       }
       continue;
     }
     body = body_of(v);
     if (player->playerstate != PST_LIVE || rider->health <= 0)
     {
-      dismount(player, false);
+      dismount(player, false, true);
       continue;
     }
     if (!body || body->health <= 0)
     {
-      dismount(player, true);
+      dismount(player, true, true);
       continue;
     }
     // carry the rider; walking over a line, picking things up and sector effects happen to him as to any player

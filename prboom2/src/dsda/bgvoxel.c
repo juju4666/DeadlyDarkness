@@ -67,16 +67,29 @@ typedef struct
   unsigned int blk;            // lighting block
 } vcell_t;
 
+#define BGVOX_LODS 4           // detail levels: cells of 1, 2, 4 and 8 original cells a side
+
+// one level of detail: its visible cells, grouped by lighting block
+typedef struct
+{
+  vcell_t* cells;              // coordinates are in cells of this level (so f original cells a side)
+  int ncells;
+  int nblk;
+  float* blkpos;               // 3 per block: the middle of its cells (in ORIGINAL cells)
+  int* blkstart;               // nblk + 1: the cells of block b are blkstart[b] .. blkstart[b + 1] - 1
+} vlod_t;
+
 typedef struct
 {
   char lump[9];
   dboolean tried, ok;
   int sx, sy, sz;
   int orgx, orgy;              // the origin (where the thing stands) in cells
-  vcell_t* cells;
+  vcell_t* cells;              // level 0 (the same arrays as lod[0])
   int ncells;
   int nblk;
   float* blkpos;               // 3 per block: the middle of its cells (in cells)
+  vlod_t lod[BGVOX_LODS];
 } vmodel_t;
 
 typedef struct
@@ -323,6 +336,105 @@ static void vox_Walk(int id, const int M[3][3], const int t[3], vfill_t* f, int 
 }
 
 // Builds a model from the bytes of a .vox file. Returns false (and says why) when it is not one we can use.
+// the visible cells of a grid (cells with an open face), grouped by lighting block. f: how many original cells a side
+// one cell of this grid is (1, 2, 4 ...); block middles are kept in original cells
+static void vox_Extract(vlod_t* L, const byte* occ, const byte* colour, int sx, int sy, int sz, int f, const pixel_t* map)
+{
+  int B = BGVOX_BLOCK, bx = (sx + B - 1) / B, by = (sy + B - 1) / B, bz = (sz + B - 1) / B;
+  int* blkid = malloc(sizeof(int) * (size_t) bx * by * bz);
+  int cap = 256, cells_cap = 65536, nblk = 0, ncells = 0, x, y, z, i, k;
+  vcell_t* cells = malloc(sizeof(vcell_t) * (size_t) cells_cap);
+  float* blkpos = malloc(sizeof(float) * 3 * (size_t) cap);
+  int* cnt;
+  vcell_t* sorted;
+  int* start;
+
+  for (i = 0; i < bx * by * bz; ++i)
+    blkid[i] = -1;
+  for (z = 0; z < sz; ++z)
+    for (y = 0; y < sy; ++y)
+      for (x = 0; x < sx; ++x)
+      {
+        long at = ((long) z * sy + y) * sx + x;
+        int faces = 0, b;
+        vcell_t* c;
+
+        if (!occ[at])
+          continue;
+        if (x + 1 >= sx || !occ[at + 1]) faces |= 1;
+        if (x == 0 || !occ[at - 1]) faces |= 2;
+        if (y + 1 >= sy || !occ[at + sx]) faces |= 4;
+        if (y == 0 || !occ[at - sx]) faces |= 8;
+        if (z + 1 >= sz || !occ[at + (long) sx * sy]) faces |= 16;
+        if (z == 0 || !occ[at - (long) sx * sy]) faces |= 32;
+        if (!faces)
+          continue;
+        b = ((z / B) * by + (y / B)) * bx + (x / B);
+        if (blkid[b] < 0)
+        {
+          if (nblk >= cap)
+          {
+            cap *= 2;
+            blkpos = realloc(blkpos, sizeof(float) * 3 * (size_t) cap);
+          }
+          blkid[b] = nblk;
+          blkpos[nblk * 3] = blkpos[nblk * 3 + 1] = blkpos[nblk * 3 + 2] = 0;
+          ++nblk;
+        }
+        if (ncells >= cells_cap)
+        {
+          cells_cap *= 2;
+          cells = realloc(cells, sizeof(vcell_t) * (size_t) cells_cap);
+        }
+        c = &cells[ncells++];
+        c->x = (unsigned short) x;
+        c->y = (unsigned short) y;
+        c->z = (unsigned short) z;
+        c->col = map[colour[at]];
+        c->faces = (byte) faces;
+        c->blk = (unsigned int) blkid[b];
+      }
+  // block middles: the mean of the cells' middles, in original cells
+  cnt = calloc((size_t) nblk + 1, sizeof(int));
+  for (k = 0; k < ncells; ++k)
+  {
+    const vcell_t* c = &cells[k];
+
+    blkpos[c->blk * 3] += (c->x + 0.5f) * f;
+    blkpos[c->blk * 3 + 1] += (c->y + 0.5f) * f;
+    blkpos[c->blk * 3 + 2] += (c->z + 0.5f) * f;
+    ++cnt[c->blk];
+  }
+  for (k = 0; k < nblk; ++k)
+    if (cnt[k] > 0)
+    {
+      blkpos[k * 3] /= (float) cnt[k];
+      blkpos[k * 3 + 1] /= (float) cnt[k];
+      blkpos[k * 3 + 2] /= (float) cnt[k];
+    }
+  // group the cells by block (counting sort), so a whole block can be skipped when it is off the screen
+  start = malloc(sizeof(int) * ((size_t) nblk + 1));
+  start[0] = 0;
+  for (k = 0; k < nblk; ++k)
+    start[k + 1] = start[k] + cnt[k];
+  sorted = malloc(sizeof(vcell_t) * (size_t) (ncells ? ncells : 1));
+  memset(cnt, 0, sizeof(int) * ((size_t) nblk + 1));
+  for (k = 0; k < ncells; ++k)
+  {
+    int b = (int) cells[k].blk;
+
+    sorted[start[b] + cnt[b]++] = cells[k];
+  }
+  free(cnt);
+  free(cells);
+  free(blkid);
+  L->cells = sorted;
+  L->ncells = ncells;
+  L->nblk = nblk;
+  L->blkpos = blkpos;
+  L->blkstart = start;
+}
+
 static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
 {
   const byte* rgba = NULL;
@@ -330,7 +442,6 @@ static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
   byte* occ;
   byte* colour;
   pixel_t map[256];
-  int B = BGVOX_BLOCK, bx, by, bz, *blkid;
   long total;
   vfill_t F;
   int ident[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }, zero[3] = { 0, 0, 0 };
@@ -540,93 +651,70 @@ static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
   vnodes = NULL; kids = mods = NULL;
   (void) ok;
 
-  // the visible cells
-  m->cells = NULL;
-  m->ncells = 0;
+  // the visible cells, at the full detail and at 2, 4 and 8 cells to a cell (what is far away is drawn from the coarse ones)
+  vox_Extract(&m->lod[0], occ, colour, sx, sy, sz, 1, map);
   {
-    m->cells = malloc(sizeof(vcell_t) * 65536);
-  }
-  bx = (sx + B - 1) / B;
-  by = (sy + B - 1) / B;
-  bz = (sz + B - 1) / B;
-  blkid = malloc(sizeof(int) * (size_t) bx * by * bz);
-  for (i = 0; i < bx * by * bz; ++i)
-    blkid[i] = -1;
-  m->nblk = 0;
-  {
-    int x, y, z;
-    int cap = 256;
-    int cells_cap = 65536;
+    int lev;
+    byte* po = occ;
+    byte* pc = colour;
+    int psx = sx, psy = sy, psz = sz;
 
-    m->blkpos = malloc(sizeof(float) * 3 * cap);
-    for (z = 0; z < sz; ++z)
-      for (y = 0; y < sy; ++y)
-        for (x = 0; x < sx; ++x)
-        {
-          long at = ((long) z * sy + y) * sx + x;
-          int faces = 0, b;
-          vcell_t* c;
-
-          if (!occ[at])
-            continue;
-          if (x + 1 >= sx || !occ[at + 1]) faces |= 1;
-          if (x == 0 || !occ[at - 1]) faces |= 2;
-          if (y + 1 >= sy || !occ[at + sx]) faces |= 4;
-          if (y == 0 || !occ[at - sx]) faces |= 8;
-          if (z + 1 >= sz || !occ[at + (long) sx * sy]) faces |= 16;
-          if (z == 0 || !occ[at - (long) sx * sy]) faces |= 32;
-          if (!faces)
-            continue;
-          b = ((z / B) * by + (y / B)) * bx + (x / B);
-          if (blkid[b] < 0)
-          {
-            if (m->nblk >= cap)
-            {
-              cap *= 2;
-              m->blkpos = realloc(m->blkpos, sizeof(float) * 3 * cap);
-            }
-            blkid[b] = m->nblk;
-            m->blkpos[m->nblk * 3] = m->blkpos[m->nblk * 3 + 1] = m->blkpos[m->nblk * 3 + 2] = 0;
-            ++m->nblk;
-          }
-          if (m->ncells >= cells_cap)
-          {
-            cells_cap *= 2;
-            m->cells = realloc(m->cells, sizeof(vcell_t) * (size_t) cells_cap);
-          }
-          c = &m->cells[m->ncells++];
-          c->x = (unsigned short) x;
-          c->y = (unsigned short) y;
-          c->z = (unsigned short) z;
-          c->col = map[colour[at]];
-          c->faces = (byte) faces;
-          c->blk = (unsigned int) blkid[b];
-        }
-  }
-  // the middle of each block: the mean of its cells (sums first, then divided by the count)
-  {
-    int* cnt = calloc((size_t) m->nblk + 1, sizeof(int));
-    int k;
-
-    for (k = 0; k < m->ncells; ++k)
+    for (lev = 1; lev < BGVOX_LODS; ++lev)
     {
-      const vcell_t* c = &m->cells[k];
+      int nx = (psx + 1) / 2, ny = (psy + 1) / 2, nz = (psz + 1) / 2;
+      long nt = (long) nx * ny * nz;
+      byte* no = calloc((size_t) nt, 1);
+      byte* nc = calloc((size_t) nt, 1);
+      byte* vote = calloc((size_t) nt, 1);
+      int x, y, z;
 
-      m->blkpos[c->blk * 3] += c->x + 0.5f;
-      m->blkpos[c->blk * 3 + 1] += c->y + 0.5f;
-      m->blkpos[c->blk * 3 + 2] += c->z + 0.5f;
-      ++cnt[c->blk];
-    }
-    for (k = 0; k < m->nblk; ++k)
-      if (cnt[k] > 0)
+      if (!no || !nc || !vote)
       {
-        m->blkpos[k * 3] /= (float) cnt[k];
-        m->blkpos[k * 3 + 1] /= (float) cnt[k];
-        m->blkpos[k * 3 + 2] /= (float) cnt[k];
+        free(no); free(nc); free(vote);
+        break;
       }
-    free(cnt);
+      for (z = 0; z < psz; ++z)
+        for (y = 0; y < psy; ++y)
+          for (x = 0; x < psx; ++x)
+          {
+            long at = ((long) z * psy + y) * psx + x;
+            long to = (((long) (z / 2)) * ny + y / 2) * nx + x / 2;
+
+            if (!po[at])
+              continue;
+            no[to] = 1;
+            // the colour of a coarse cell: the majority vote of its children
+            if (vote[to] == 0)
+            {
+              nc[to] = pc[at];
+              vote[to] = 1;
+            }
+            else if (nc[to] == pc[at])
+              ++vote[to];
+            else
+              --vote[to];
+          }
+      vox_Extract(&m->lod[lev], no, nc, nx, ny, nz, 1 << lev, map);
+      if (po != occ)
+      {
+        free(po);
+        free(pc);
+      }
+      po = no;
+      pc = nc;
+      psx = nx; psy = ny; psz = nz;
+      free(vote);
+    }
+    if (po != occ)
+    {
+      free(po);
+      free(pc);
+    }
   }
-  free(blkid);
+  m->cells = m->lod[0].cells;
+  m->ncells = m->lod[0].ncells;
+  m->nblk = m->lod[0].nblk;
+  m->blkpos = m->lod[0].blkpos;
   free(occ);
   free(colour);
   if (m->ncells > BGVOX_MAXCELLS)
@@ -636,8 +724,15 @@ static dboolean vox_Build(vmodel_t* m, const byte* d, int size, const byte* pal)
 
 static void vox_Free(vmodel_t* m)
 {
-  free(m->cells);
-  free(m->blkpos);
+  int l;
+
+  for (l = 0; l < BGVOX_LODS; ++l)
+  {
+    free(m->lod[l].cells);
+    free(m->lod[l].blkpos);
+    free(m->lod[l].blkstart);
+    memset(&m->lod[l], 0, sizeof(m->lod[l]));
+  }
   m->cells = NULL;
   m->blkpos = NULL;
   m->ncells = m->nblk = 0;
@@ -967,6 +1062,13 @@ static const vprop_t* prop_of_sprite(int sprite)
   return NULL;
 }
 
+// a voxel prop in one of its other frames (explosion, wreck) has no flat picture to fall back on
+dboolean bgvox_NoFlatFrame(const mobj_t* thing)
+{
+  return thing->state && (thing->state->frame & 0x7fff) != 0 && prop_of_sprite(thing->state->sprite) != NULL;
+}
+
+
 dboolean bgvox_FrameLight(const mobj_t* thing, double* radius, double* strength, double* col)
 {
   const vprop_t* p;
@@ -994,6 +1096,7 @@ dboolean bgvox_FrameLight(const mobj_t* thing, double* radius, double* strength,
 typedef struct
 {
   const vmodel_t* m;
+  int lod;                     // detail level to draw (cells of 1 << lod original cells)
   double ox, oy, oz;           // the model's origin (the middle of its footprint, on its floor) in the world
   double ca, sa;               // thing angle plus the frame's yaw
   double vs;                   // one cell, in map units
@@ -1157,6 +1260,16 @@ int bgvox_Project(const mobj_t* thing, fixed_t fx, fixed_t fy, fixed_t fz, int* 
     if (tzc < 8.0)
       tzc = 8.0;
     *scale = (fixed_t) (projy / tzc * 65536.0);
+    // the coarsest level whose cells still cover no more than about a pixel and a half: what is far away is drawn from
+    // fewer, bigger cells (the cost is the number of cells, however small they come out on the screen)
+    {
+      double px = vs * proj / tzc;
+      int lv = 0;
+
+      while (lv < BGVOX_LODS - 1 && m->lod[lv + 1].cells && px * (double) (2 << lv) <= 1.5)
+        ++lv;
+      I->lod = lv;
+    }
   }
   *x1 = I->bx0;
   *x2 = I->bx1;
@@ -1180,7 +1293,8 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
 {
   const vinst_t* I;
   const vmodel_t* m;
-  int w, h, x, y, k;
+  int w, h, x, y, k, blk, f;
+  const vlod_t* L;
   double t_start = 0, t_light = 0;
   size_t need;
   double vs, hs, proj, projy, cx, cy, vz, hwk, hhk;
@@ -1203,8 +1317,10 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
     pbuf = malloc(need * sizeof(pixel_t));
     zcap = need;
   }
+  L = &m->lod[I->lod];
+  f = 1 << I->lod;
   {
-    size_t nl = (size_t) m->nblk * 6;
+    size_t nl = (size_t) L->nblk * 6;
 
     if (nl > lcap)
     {
@@ -1218,7 +1334,7 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
     zbuf[k] = 1e30f;
 
   vs = I->vs;
-  hs = 0.5 * vs;
+  hs = 0.5 * vs * f;
   proj = bg_Fix(projection);
   projy = bg_Fix(projectiony);
   cx = bg_Fix(centerxfrac);
@@ -1227,10 +1343,29 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
   hwk = hs * (fabs(I->xx) + fabs(I->yx)) * proj;
   hhk = hs * projy;
 
-  for (k = 0; k < m->ncells; ++k)
+  for (blk = 0; blk < L->nblk; ++blk)
   {
-    const vcell_t* c = &m->cells[k];
-    double lx = (c->x + 0.5 - I->cx0) * vs, ly = (c->y + 0.5 - I->cy0) * vs, lz = (c->z + 0.5) * vs;
+    // a whole block of cells that is behind the viewer or outside the box on the screen is not looked at
+    {
+      double bx = (L->blkpos[blk * 3] - I->cx0) * vs, by = (L->blkpos[blk * 3 + 1] - I->cy0) * vs;
+      double bz = L->blkpos[blk * 3 + 2] * vs, rad = BGVOX_BLOCK * f * vs * 0.9;
+      double btz = I->tz0 + bx * I->xz + by * I->yz, btx = I->tx0 + bx * I->xx + by * I->yx;
+
+      if (btz + rad < 4.0)
+        continue;
+      if (btz > rad + 4.0)
+      {
+        double binv = 1.0 / (btz - rad), bsx = cx + btx * proj / btz, bsy = cy - (I->oz + bz - vz) * projy / btz;
+        double rx = rad * proj * binv + 2.0, ry = rad * projy * binv + 2.0;
+
+        if (bsx + rx < I->bx0 || bsx - rx > I->bx1 || bsy + ry < I->by0 || bsy - ry > I->by1)
+          continue;
+      }
+    }
+  for (k = L->blkstart[blk]; k < L->blkstart[blk + 1]; ++k)
+  {
+    const vcell_t* c = &L->cells[k];
+    double lx = ((c->x + 0.5) * f - I->cx0) * vs, ly = ((c->y + 0.5) * f - I->cy0) * vs, lz = (c->z + 0.5) * f * vs;
     double ddx = I->camx - lx, ddy = I->camy - ly, ddz = I->camz - lz;
     int vis = 0, face = -1;
     double best = -1;
@@ -1282,9 +1417,9 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
       static const int sgn[6] = { 1, -1, 1, -1, 1, -1 };
 
       // block middle in the model (map units), then the world; the point is a cell out from the surface
-      bx = (m->blkpos[c->blk * 3] - I->cx0) * vs;
-      by = (m->blkpos[c->blk * 3 + 1] - I->cy0) * vs;
-      bz = m->blkpos[c->blk * 3 + 2] * vs;
+      bx = (L->blkpos[c->blk * 3] - I->cx0) * vs;
+      by = (L->blkpos[c->blk * 3 + 1] - I->cy0) * vs;
+      bz = L->blkpos[c->blk * 3 + 2] * vs;
       switch (face)
       {
         case 0: case 1: n[0] = sgn[face] * I->ca;  n[1] = sgn[face] * I->sa;  n[2] = 0; break;
@@ -1337,6 +1472,7 @@ void bgvox_Draw(int inst_no, const int* floorclip, const int* ceilingclip)
       }
     }
     ++cells_drawn;
+  }
   }
 
   // to the screen, inside the clipping of the walls

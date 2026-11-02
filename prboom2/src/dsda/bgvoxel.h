@@ -43,6 +43,7 @@ dboolean bgvox_FrameLight(const mobj_t* thing, double* radius, double* strength,
 
 // 0: scenery; 1: a motorcycle, 2: a mecha (the prop line says `vehicle moto` or `vehicle mecha`, see bgvehicle.h)
 int bgvox_VehicleKind(const mobj_t* thing);
+dboolean bgvox_NoFlatFrame(const mobj_t* thing);   // true: do not draw this thing as a picture (model off screen)
 int bgvox_TypeOfKind(int kind);   // the thing type of the (first) prop of a vehicle kind, -1: none
 
 int bgvox_Count(void);                 // number of voxel props defined

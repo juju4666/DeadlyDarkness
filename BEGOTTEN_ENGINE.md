@@ -1120,3 +1120,22 @@ If you have changed MAP01 in your own editor, run the hall script on your versio
 
 Developer aids: `BEGOTTEN_VEHTEST` also takes `tl=n tr=n` (the tracks, -127..127) and `style` (once), and `BEGOTTEN_VEHTEST2` plays
 player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now has a second player start.
+
+## 0.15.1 - voxel speed, vehicle fixes, a crash
+
+- **Voxel models are much lighter.** The cost of a model was the number of its visible cells, however small they came out on the
+  screen (a car is 100,000 or more), and the hall drew a dozen of them: about 52 ms a frame for the models alone, now about 5.
+  Each model is now also kept at 2, 4 and 8 original cells to a cell, and a model is drawn from the coarsest level whose cells still
+  cover no more than a pixel and a half, so nothing far away is drawn finer than the screen can show (up close the full model is
+  used, as before). The cells are grouped in lighting blocks and a block that is behind the viewer or off the screen is skipped
+  as a whole, which is what makes standing next to a car cheap (about 7 ms). The light is evaluated per block, so it is cheaper
+  with the levels too. `BGVOX_STATS=1` prints the figures. Memory per model grows by about a third.
+- **The crash** (`createPatch: Unknown patch format S_START`): a voxel prop in an explosion or wreck frame whose model was off
+  the screen fell back to its flat picture, which only has the first frame, and read past it (what it found there depends on the
+  machine, which is why it happened on Windows). Such a prop is now simply not drawn, and any sprite frame that does not exist is skipped
+  instead of read.
+- **The motorcycle steers by rolling:** its turning is proportional to its speed, none at a standstill and full from 3 units a tic.
+- **Getting off a vehicle** checks the way: the rider is walked from the seat to the place beside it in small steps (a thing moved
+  far in one go did not notice a thin wall between, and ended up outside the map), the vehicle itself is not an obstacle, and
+  if none of the eight places around it is free (a wall, a low ceiling, something standing there) he stays on and gets
+  "No room to get off here." When he has to get off (he died, the vehicle blew up) he is put down anyway.

@@ -789,6 +789,10 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
       bgvox_SetBase(vi, vcm, thing->subsector->sector);
       return;
     }
+    // the model is off the screen (or could not be drawn): the flat sprite has only the first frame, so the
+    // explosion and wreck frames of a prop must not be looked up in it
+    if (bgvox_NoFlatFrame(thing))
+      return;
   }
 
     // decide which patch to use for sprite relative to player
@@ -807,6 +811,9 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
       bgsprite = bg_ClassSprite(thing->player->bgclass, thing->sprite, thing->frame);
   }
   sprdef = &sprites[bgsprite];
+
+  if ((bgframe & FF_FRAMEMASK) >= sprdef->numframes || !sprdef->spriteframes)
+    return;                                  // Begotten: a frame the sprite does not have is not drawn (never a crash)
 
 #ifdef RANGECHECK
   if ((bgframe&FF_FRAMEMASK) >= sprdef->numframes)
