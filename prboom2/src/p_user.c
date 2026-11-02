@@ -67,6 +67,7 @@
 #include "sounds.h"
 #include "p_inter.h"
 #include "m_random.h"
+#include "dsda/bgvehicle.h"
 
 //
 // Movement.
@@ -198,6 +199,9 @@ void P_CalcHeight (player_t* player)
 {
   int     angle;
   fixed_t bob, totalviewoffset;
+
+  if (bg_weapons && bgveh_Camera(player))    // Begotten: driving a vehicle
+    return;
 
   // Regular movement bobbing
   // (needs to be calculated for gun swing
@@ -671,6 +675,8 @@ void P_PlayerThink (player_t* player)
   weapontype_t newweapon;
   int floorType;
 
+  if (bg_weapons)
+    bgveh_TestCmd(player);
   bg_PoseTick(player);
   player->bgaltprev = player->bgaltcur;
   player->bgaltcur = (player->cmd.ex.actions & XC_ALT) ? 1 : 0;
@@ -755,6 +761,10 @@ void P_PlayerThink (player_t* player)
 
   if (player->mo->reactiontime)
     player->mo->reactiontime--;
+  else if (bg_weapons && bgveh_Control(player))
+  {
+    // Begotten: driving a vehicle (dsda/bgvehicle.c)
+  }
   else
   {
     P_MovePlayer(player);
@@ -907,7 +917,7 @@ void P_PlayerThink (player_t* player)
   if (dsda_AllowExCmd())
   {
     if (cmd->ex.actions & XC_JUMP && onground && !player->jumpTics &&
-        bg_ClassJumpMomz(player) != 0)
+        bg_ClassJumpMomz(player) != 0 && !(bg_weapons && bgveh_Mounted(player)))
     {
       fixed_t jump = bg_ClassJumpMomz(player);
 
@@ -982,7 +992,8 @@ void P_PlayerThink (player_t* player)
   {
     if (!player->usedown)
     {
-      P_UseLines(player);
+      if (!(bg_weapons && bgveh_Use(player)))
+        P_UseLines(player);
       player->usedown = true;
     }
   }
@@ -1011,8 +1022,9 @@ void P_PlayerThink (player_t* player)
     }
   }
 
-  // cycle psprites
-  P_MovePsprites (player);
+  // cycle psprites (not while driving: the hands are on the handlebars)
+  if (!(bg_weapons && bgveh_Mounted(player)))
+    P_MovePsprites (player);
 
   // Counters, time dependent power ups.
 

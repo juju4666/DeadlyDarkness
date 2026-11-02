@@ -1023,3 +1023,47 @@ back with environment variables: `BEGOTTEN_EFFECT_MAX=n` (made per frame), `BEGO
 cast shadows, nearest first), `BEGOTTEN_EFFECT_REACH=units`, `BEGOTTEN_EFFECT_THINGS=0` (things do not block them).
 My numbers on the 2-core test machine, held lightning alt fire, 1280x720 software: 24 fps with 1 thread, 33 fps with 2
 (for comparison the old limited setting gave 36 fps with 1 thread).
+
+## 0.13.2 - projectile lights cast no shadows
+
+Back to the limits of 0.12.3/0.13.0 for the lights of projectiles, explosions and puffs (at most 4 a frame, within 900
+units), and none of them casts a shadow. The gun flash and the flashlight keep theirs. The renderer stays threaded. The
+environment variables of 0.13.1 still loosen the limits (`BEGOTTEN_EFFECT_SHADOWS=n` gives the nearest n shadows back).
+
+## 0.14.0 - vehicles: a motorcycle and a mecha
+
+Drivable vehicles. They are voxel props (0.10.69) with `vehicle moto` or `vehicle mecha` on their `prop` line, placed in UDB like
+any thing (the "Begotten: Vehicles" category: 21201 motorcycle, 21202 mecha; the thing's angle is the way it faces). Code:
+`dsda/bgvehicle.c`; the models and the BGVOXELV lump are made by `tools/make_vehicles.py` (blocky stand-ins, 150 cells long for the
+bike and 240 cells tall for the mecha; replace the `.vox` files and keep the lines) and live in `game/vehicles` and in `begotten.wad`.
+
+- **Getting in and out:** Use next to a free vehicle (within about 56 units of it) gets on; Use again gets off, on the left, or the
+  right, behind or in front, whichever side is free. Use does not press switches while driving: get off first.
+- **The view** is first person from the seat (bike 26 units up, mecha 84). The vehicle is not drawn in its own rider's view (and does
+  not shade his flashlight), other players see it; there is no weapon in view and no weapon change while driving. The status bar
+  shows `MOTORCYCLE hp SPEED n` just over it.
+- **Motorcycle:** forward = throttle, back = brake, then reverse. It turns with the mouse or the turn keys (and the side keys), by
+  at most 5 degrees a tic standing and 2 at top speed (3 times less when it hardly moves), so the view follows the heading. Tyres
+  keep 80% of the sideways speed each tic, so it drifts in a corner; the jump key is the handbrake (96%, a long slide). Top speed
+  30 units a tic (the engine's limit for any thing). It is hurt by hitting a wall or anything solid hard (twice the speed lost
+  above 9 units a tic), and it runs monsters over: from 12 units a tic anything shootable in front of it is hit for up to 70
+  damage and thrown ahead, and the bike slows to 60%. Health 150.
+- **Mecha:** it walks and strafes like the player but slower (9.5 forward, 6 back, 6.5 sideways), reaches a speed in a few tics and stops
+  when the keys are let go, turns at most 4 degrees a tic, and stomps what it walks into (from 5 units a tic, up to 25). Primary fire:
+  the cannon (a bullet every 3 tics, 10-20 damage, slightly spread); alt fire: a rocket every 32 tics. No ammo. Shots and rockets pass
+  through its own body. Health 500. It is 100 units tall and 64 wide: it does not go through low or narrow doors.
+- **Damage:** every blow at the rider (bullets, claws, explosions, floors) lands on the vehicle; the rider is untouched until it is
+  destroyed. Then it plays the model's explosion (a radius blast like a barrel, which also hurts what is near) and leaves a
+  burning wreck, and the rider is thrown out, taking 15-30 damage. A rider's own rockets hurt his vehicle a quarter as much.
+- **How it works:** the vehicle is an ordinary thing with the usual movement (walls, steps, monsters, portals), and each tic the
+  driving code only sets its momentum from the keys. The rider's own thing is not solid or shootable while driving and is moved onto
+  the vehicle after every tic (so lines he crosses, items he touches and special sectors still work for him). The link is the two
+  `tracer` pointers, so a saved game keeps you in the vehicle (checked with `BEGOTTEN_SELFTEST=8`) and nothing else was added to the
+  save format. All arithmetic is integer, so demos and network games stay in step.
+- **Not done:** the tank (two players, one drives and one shoots; the plan is in the conversation: a "wheels" and a "tracks" control
+  style, a turret that turns freely, split-screen with a cockpit view each, which the engine's local split-screen can show),
+  vehicle sounds (engine noise), tyre marks, lean, drivable-vehicle monsters, teleporters while driving (the rider is brought back
+  to the vehicle), the AI avoiding a parked vehicle, and the wreck being driven off. Weapons of the bike's rider are not used.
+- Developer aids: `BEGOTTEN_VEHTEST="20:use 30:fwd=50 70:turn=-200 100:fwd=0 110:hurt=60 120:fire=1 130:alt=1"` plays player 1's
+  controls by tic (`use`, `hurt` once; `fwd side turn fire alt jump` until changed; `turn` is the raw angleturn, 16384 = 90 degrees),
+  and `BEGOTTEN_VEHDEBUG=1` prints the state every 10 tics. `tools/make_vehicle_test_map.py` makes a test room with both vehicles.

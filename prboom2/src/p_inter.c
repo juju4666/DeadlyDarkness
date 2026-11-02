@@ -48,6 +48,7 @@
 #include "lprintf.h"
 
 #include "p_inter.h"
+#include "dsda/bgvehicle.h"
 #include "p_enemy.h"
 #include "p_spec.h"
 #include "p_pspr.h"
@@ -1446,6 +1447,15 @@ void P_DamageMobj(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage)
 {
   player_t *player;
   dboolean justhit = false;          /* killough 11/98 */
+
+  if (bg_weapons)
+  {
+    // Begotten vehicles: a blow at the rider hits the vehicle; the rider's own weapons do little to it
+    if (target->player)
+      target = bgveh_Redirect(target);
+    if (source && source->player && bgveh_OwnVehicle(source, target))
+      damage = (damage + 3) / 4;
+  }
 
   if (target->player && getenv("BEGOTTEN_DAMAGELOG"))    // developer aid
     fprintf(stderr, "DAMAGE %d to player at tic %d: inflictor type %d at %d %d, source type %d at %d %d tid %d\n", damage, leveltime,

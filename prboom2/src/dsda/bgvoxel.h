@@ -9,7 +9,7 @@
 // sprites. See LIGHTING.md and BEGOTTEN_ENGINE.md (0.10.69).
 //
 // The BGVOXEL lump defines the props:
-//   prop    KEY EDNUM sprite SPRT [radius R] [height H] [health N] [mass M] [wreck] [offset X Y Z]
+//   prop    KEY EDNUM sprite SPRT [radius R] [height H] [health N] [mass M] [wreck] [vehicle moto|mecha] [offset X Y Z]
 //   model   KEY FRAME LUMP [light RADIUS STRENGTH R G B] [yaw DEGREES]
 // FRAME is a letter: A idle, B explosion, C and D the burning wreck (D is optional). See BEGOTTEN_ENGINE.md.
 //
@@ -40,6 +40,9 @@ void bgvox_Draw(int inst, const int* floorclip, const int* ceilingclip);
 
 // the light a model frame gives (the burning wreck): returns true and fills radius, strength and colour (0..1)
 dboolean bgvox_FrameLight(const mobj_t* thing, double* radius, double* strength, double* col);
+
+// 0: scenery; 1: a motorcycle, 2: a mecha (the prop line says `vehicle moto` or `vehicle mecha`, see bgvehicle.h)
+int bgvox_VehicleKind(const mobj_t* thing);
 
 int bgvox_Count(void);                 // number of voxel props defined
 int bgvox_CellsDrawn(void);            // cells drawn last frame (statistics)

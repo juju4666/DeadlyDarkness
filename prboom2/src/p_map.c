@@ -33,6 +33,7 @@
  *-----------------------------------------------------------------------------*/
 
 #include "dsda/begotten.h"
+#include "dsda/bgvehicle.h"
 #include "dsda/bgroster.h"
 #include "doomstat.h"
 #include "r_main.h"
@@ -729,6 +730,9 @@ static dboolean PIT_CheckThing(mobj_t *thing) // killough 3/26/98: make static
 
   // begotten: co-op without friendly fire, shots fly through the other players
   if (bg_weapons && (tmthing->flags & MF_MISSILE) && bg_CoopShield(tmthing->target, thing))
+    return true;
+  // begotten: a rider's rockets leave through his own vehicle
+  if (bg_weapons && (tmthing->flags & MF_MISSILE) && bgveh_OwnVehicle(tmthing->target, thing))
     return true;
 
   // killough 11/98:
@@ -2493,6 +2497,9 @@ dboolean PTR_AimTraverse (intercept_t* in)
   if (th == shootthing)
     return true;    // can't shoot self
 
+  if (bg_weapons && bgveh_OwnVehicle(shootthing, th))
+    return true;    // begotten: nor aim at the vehicle he rides in
+
   if (!(th->flags&MF_SHOOTABLE))
     return true;    // corpse or something
 
@@ -2697,6 +2704,9 @@ dboolean PTR_ShootTraverse (intercept_t* in)
   th = in->d.thing;
   if (th == shootthing)
     return true;  // can't shoot self
+
+  if (bg_weapons && bgveh_OwnVehicle(shootthing, th))
+    return true;  // begotten: nor the vehicle he rides in
 
   if (!(th->flags&MF_SHOOTABLE))
     return true;  // corpse or something

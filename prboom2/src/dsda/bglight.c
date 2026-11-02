@@ -60,6 +60,7 @@
 #include "dsda/map_format.h"
 #include "dsda/aim.h"
 #include "dsda/bgvoxel.h"
+#include "dsda/bgvehicle.h"
 #include <SDL_atomic.h>
 #include "dsda/bgthreads.h"
 #include "dsda/bgscale.h"
@@ -1004,10 +1005,10 @@ static dboolean bg_IsPowerup(int type)
 }
 
 // projectiles, their explosions and the flashes of guns
-// Limits on the lights of projectiles, explosions and puffs. With the threaded renderer (0.13) they are off by default
-// (as before 0.12.3: all of them are made, all cast shadows, things block them); to bring them back for a slow machine set
-// BEGOTTEN_EFFECT_MAX=n (lights made per frame), BEGOTTEN_EFFECT_SHADOWS=n (of those, how many cast shadows, nearest first),
-// BEGOTTEN_EFFECT_REACH=units, BEGOTTEN_EFFECT_THINGS=0 (things do not block their light).
+// Limits on the lights of projectiles, explosions and puffs: at most 4 a frame, within 900 units, and none of them casts a
+// shadow (0.13.2). They can be loosened with BEGOTTEN_EFFECT_MAX=n (lights made per frame), BEGOTTEN_EFFECT_SHADOWS=n (of
+// those, how many cast shadows, nearest first), BEGOTTEN_EFFECT_REACH=units, BEGOTTEN_EFFECT_THINGS=1 (things block their
+// light). The gun flash and the flashlight keep their shadows.
 static int bg_effect_max = -1, bg_effect_shadows, bg_effect_things;
 static double bg_effect_reach;
 
@@ -1018,13 +1019,13 @@ static void bg_EffectLimits(void)
   if (bg_effect_max >= 0)
     return;
   e = getenv("BEGOTTEN_EFFECT_MAX");
-  bg_effect_max = e ? atoi(e) : 1000;
+  bg_effect_max = e ? atoi(e) : 4;
   e = getenv("BEGOTTEN_EFFECT_SHADOWS");
-  bg_effect_shadows = e ? atoi(e) : 1000;
+  bg_effect_shadows = e ? atoi(e) : 0;
   e = getenv("BEGOTTEN_EFFECT_REACH");
-  bg_effect_reach = e ? atof(e) : 1e9;
+  bg_effect_reach = e ? atof(e) : 900.0;
   e = getenv("BEGOTTEN_EFFECT_THINGS");
-  bg_effect_things = e ? atoi(e) != 0 : 1;
+  bg_effect_things = e ? atoi(e) != 0 : 0;
 }
 #define BG_EFFECT_REACH bg_effect_reach
 #define BG_EFFECT_MAX bg_effect_max
@@ -2300,6 +2301,8 @@ static void bg_CollectOccluders(void)
       continue;
     if (first_type >= 0 && mo->type >= first_type && mo->type < first_type + num_defs)
       continue;
+    if (viewplayer && bgveh_HideFromView(mo, viewplayer))
+      continue;                  // the viewer sits inside this vehicle: it would shade his own light
     x = bg_Fix(mo->x);
     y = bg_Fix(mo->y);
     r = bg_Fix(mo->radius);

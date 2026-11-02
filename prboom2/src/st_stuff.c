@@ -61,6 +61,7 @@
 #include "dsda/bgpickup.h"
 #include "dsda/bgcoop.h"
 #include "dsda/bgsplit.h"
+#include "dsda/bgvehicle.h"
 #include "dsda/text_color.h"
 
 #include "heretic/sb_bar.h"
@@ -487,6 +488,15 @@ static void ST_drawTickets(void)
     return;                       // split-screen games show it in the first view instead
   snprintf(buf, sizeof buf, "%d", n);
   bg_WriteText(ST_FACESX + 30 - (int) (strlen(buf) - 1) * 4, ST_Y + 1, buf, CR_GOLD);
+}
+
+// Begotten vehicles: name, health and speed of what the player drives, over the weapons
+static void ST_drawVehicle(void)
+{
+  char buf[64];
+
+  if (bgveh_StatusText(plyr, buf, sizeof buf))
+    bg_WriteText(160 - (int) strlen(buf) * 4, ST_Y - 12, buf, CR_GOLD);
 }
 
 static void ST_drawBegotten(void)
@@ -1139,6 +1149,7 @@ static void ST_drawWidgets(dboolean refresh)
 
   if (bg_weapons)
     ST_drawTickets();   // last, so the face does not cover it
+    ST_drawVehicle();
 }
 
 void ST_SetResolution(void)

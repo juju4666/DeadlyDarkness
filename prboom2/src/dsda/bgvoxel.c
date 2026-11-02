@@ -93,6 +93,7 @@ typedef struct
   char sprname[5];
   int ednum, sprite, type;
   int health, radius, height, mass;
+  int vehicle;                 // 0: scenery, 1: motorcycle, 2: mecha (see bgvehicle.c)
   double offx, offy, offz;     // map units
   vframe_t fr[4];
   int idle, death0, death1, wreck0, wreck1;
@@ -751,6 +752,8 @@ static void vox_BuildProp(vprop_t* p)
   info.height = p->height * FRACUNIT;
   info.mass = p->mass;
   info.flags = MF_SOLID | MF_SHOOTABLE | MF_NOBLOOD;
+  if (p->vehicle)
+    info.flags |= MF_DROPOFF;      // a vehicle can drive off a ledge
   info.deathsound = sfx_barexp;
   p->type = dsda_AppendMobjInfo(&info);
 }
@@ -819,6 +822,13 @@ static void vox_Parse(const char* text)
         else if (!strcasecmp(tok[k], "height") && k + 1 < n) p->height = atoi(tok[++k]);
         else if (!strcasecmp(tok[k], "health") && k + 1 < n) p->health = atoi(tok[++k]);
         else if (!strcasecmp(tok[k], "mass") && k + 1 < n) p->mass = atoi(tok[++k]);
+        else if (!strcasecmp(tok[k], "vehicle") && k + 1 < n)
+        {
+          ++k;
+          p->vehicle = !strcasecmp(tok[k], "moto") ? 1 : !strcasecmp(tok[k], "mecha") ? 2 : 0;
+          if (!p->vehicle)
+            lprintf(LO_WARN, "BGVOXEL: prop %s: `vehicle %s` is not moto or mecha\n", p->key, tok[k]);
+        }
         else if (!strcasecmp(tok[k], "offset") && k + 3 < n)
         {
           p->offx = atof(tok[k + 1]);
@@ -909,6 +919,18 @@ void bgvox_NewLevel(void)
 
   for (i = 0; i < num_models; ++i)
     vox_Free(&models[i]);
+}
+
+int bgvox_VehicleKind(const mobj_t* thing)
+{
+  int i;
+
+  if (!thing)
+    return 0;
+  for (i = 0; i < num_props; ++i)
+    if (props[i].vehicle && props[i].type == thing->type)
+      return props[i].vehicle;
+  return 0;
 }
 
 int bgvox_Count(void)

@@ -38,6 +38,7 @@
 #include "dsda/begotten.h"
 #include "dsda/portal.h"
 #include "p_tick.h"
+#include "dsda/bgvehicle.h"
 #include "p_map.h"
 #include "r_fps.h"
 #include "e6y.h"
@@ -386,6 +387,8 @@ void P_Ticker (void)
           P_PlayerThink(&players[i]);
 
     P_RunThinkers();
+    if (bg_weapons)
+      bgveh_PostTick();            // Begotten: riders go with their vehicles
     if (bg_numportals)
       bg_PortalsUpdate();          // Begotten: portals on polyobjects turn and move with them
     P_UpdateSpecials();

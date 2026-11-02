@@ -1,0 +1,13 @@
+# Vehicles (BEGOTTEN_ENGINE.md, 0.14.0): voxel props with `vehicle moto` or `vehicle mecha`.
+# Get in and out with Use. Motorcycle: throttle, brake, steer with the mouse or turn keys (and the side keys);
+# the jump key is the handbrake. Mecha: walks and strafes like the player, primary fire is the cannon, alt fire the rockets.
+prop  moto  21201 sprite VMTO radius 22 height 32  health 150 mass 400  vehicle moto
+model moto  A VXMOTO
+model moto  B VXMOTOB light 300 1.0  1.0 0.55 0.2
+model moto  C VXMOTOC light 200 0.8  1.0 0.5  0.15
+model moto  D VXMOTOD light 200 0.75 1.0 0.55 0.2
+prop  mecha 21202 sprite VMCH radius 32 height 100 health 500 mass 1500 vehicle mecha
+model mecha A VXMECH
+model mecha B VXMECHB light 420 1.0  1.0 0.55 0.2
+model mecha C VXMECHC light 320 0.85 1.0 0.5  0.15
+model mecha D VXMECHD light 320 0.8  1.0 0.55 0.2

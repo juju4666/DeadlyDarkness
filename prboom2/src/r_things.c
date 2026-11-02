@@ -37,6 +37,7 @@
 #include "dsda/bglight.h"
 #include "dsda/bgdefer.h"
 #include "dsda/bgvoxel.h"
+#include "dsda/bgvehicle.h"
 #include "r_bsp.h"
 #include "r_segs.h"
 #include "r_draw.h"
@@ -902,6 +903,8 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
   if (thing == players[displayplayer].mo && walkcamera.type != 2)
 //  if (thing->player && thing->player == &players[displayplayer] && walkcamera.type != 2)
     return;
+  if (bg_weapons && viewplayer && bgveh_HideFromView(thing, viewplayer))
+    return;                          // Begotten: the vehicle the viewer rides in is his cockpit
 
   // store information in a vissprite
   vis = R_NewVisSprite ();
@@ -1425,6 +1428,8 @@ void R_DrawPlayerSprites(void)
 
   if (walkcamera.type != 0)
     return;
+  if (bg_weapons && bgveh_Mounted(viewplayer))
+    return;                          // Begotten: driving, no weapon in view
 
   // get light level
   R_SetSpritelights(viewplayer->mo->subsector->sector->lightlevel);
