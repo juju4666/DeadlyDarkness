@@ -1201,3 +1201,16 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 - **Rails, checked with real mouse events** (xdotool in a virtual display): the facing follows the mouse while grinding and does not change on the rail's corners; the rail
   only decides where he goes. `BEGOTTEN_VEHDEBUG=1` now prints the angle and pitch with every `RAIL on line ...` line.
 - Test aids: `LIGHT=n` (room light level) in `tools/make_vehicle_test_map.py`.
+
+## 0.15.6 - the mecha cockpit
+
+- **The model of the vehicle you ride in is no longer drawn in your view.** The check (`bgveh_HideFromView`) sat after the voxel branch of `R_ProjectSprite`, so voxel vehicles were never
+  hidden and, with the camera inside the mecha's body (seat height 84), the player saw the inside of its head. It now runs before the voxel branch. (The tank driver still sees his whole tank; the gunner does not see his turret.)
+- **Looking up and down in a vehicle** works again: the vehicle branch of `P_PlayerThink` skipped `P_MovePlayer`, which is where the look is carried out, so only the turn keys and mouse worked. It now calls `P_HandleExCmdLook` (free look must be on, as elsewhere). Checked with real mouse events.
+
+## 0.15.7 - tank and bike views
+
+- **Tank eye on the turret ring.** The driver's eye used to sit 38 units ahead of the turret pivot, so when the turret followed his look the cannon slid off to one side. Both tank seats now sit over the pivot (`TANK_DRIVER` 0), 48 units up (above the turret's top, so the camera is never inside a model); the barrel stays dead ahead of the view at any angle.
+- **Nothing of your own tank is hidden any more** (the turret used to be hidden from the gunner, which also removed the cannon from his view); the bike and the mecha are still hidden from their rider.
+- **Look up/down** checked in the bike, the tank driver and the tank gunner. Test aid: `look=N` token in `BEGOTTEN_VEHTEST`.
+- Tank style (wheels/tracks) key: `c` (pad Y), rebindable in the Tank section of the keys menu (`dsda_input_tank_style`).

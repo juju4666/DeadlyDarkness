@@ -764,7 +764,8 @@ void P_PlayerThink (player_t* player)
     player->mo->reactiontime--;
   else if (bg_weapons && bgveh_Control(player))
   {
-    // Begotten: driving a vehicle (dsda/bgvehicle.c)
+    // Begotten: driving a vehicle (dsda/bgvehicle.c); looking up and down is still his own
+    P_HandleExCmdLook(player);
   }
   else if (bg_weapons && bgrail_Control(player))
   {

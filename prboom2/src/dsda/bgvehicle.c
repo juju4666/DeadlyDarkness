@@ -64,14 +64,14 @@ static const kind_t kinds[KIND_COUNT] =
   { "MECHA", 84, F(4, 75), F(3, 0), F(3, 25), F(0, 28), F(0, 0), F(0, 0), F(0, 0), 4, 4, 3, 25 },
   // tank hull (the driver's seat): see tank_drive. Wheels style: heavy car (accel, brake, roll, grip, turn); the
   // maxside of 0 only means "no strafing"
-  { "TANK", 46, F(7, 50), F(3, 50), 0, F(0, 20), F(0, 45), ((fixed_t) (985 * FRACUNIT / 1000)), F(0, 86), 1, 2, 3, 60 },
+  { "TANK", 48, F(7, 50), F(3, 50), 0, F(0, 20), F(0, 45), ((fixed_t) (985 * FRACUNIT / 1000)), F(0, 86), 1, 2, 3, 60 },
   // tank turret (the gunner's seat): see tank_gun
-  { "TANK GUNNER", 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  { "TANK GUNNER", 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 };
 
 #define SHIELD_TICS 20     // a rider thrown out of a wreck takes no damage for this long
 #define TANK_DECK 22       // height of the turret ring above the hull's floor, map units
-#define TANK_DRIVER 38     // the driver's eye is this far ahead of the hull's centre
+#define TANK_DRIVER 0      // the driver's eye is this far ahead of the hull's centre (0: over the turret ring, so the cannon is dead ahead of the view)
 #define TANK_LOOK 12743    // furthest he can look away from straight ahead (70 degrees, in angleturn units)
 
 static const kind_t* kind_of(const mobj_t* v)
@@ -147,7 +147,7 @@ dboolean bgveh_OwnVehicle(const mobj_t* shooter, const mobj_t* vehicle)
 // sees the whole tank around him)
 dboolean bgveh_HideFromView(const mobj_t* thing, const player_t* viewer)
 {
-  return viewer && viewer->mo && bgveh_OwnVehicle(viewer->mo, thing) && kind_of(thing) != K_TANK;
+  return viewer && viewer->mo && bgveh_OwnVehicle(viewer->mo, thing) && kind_of(thing) != K_TANK && kind_of(thing) != K_TURRET;
 }
 
 mobj_t* bgveh_Redirect(mobj_t* target)
@@ -1146,7 +1146,7 @@ void bgveh_TestCmd(player_t* player)
 {
   static struct
   {
-    int init, ntok, next, fwd, side, turn, fire, alt, jump, tl, tr;
+    int init, ntok, next, fwd, side, turn, fire, alt, jump, tl, tr, look;
     struct { int tic; char what[16]; int val; } tok[256];
   } st[2];
   const char* e;
@@ -1193,6 +1193,7 @@ void bgveh_TestCmd(player_t* player)
     else if (!strcmp(w, "fire")) st[n].fire = v;
     else if (!strcmp(w, "alt")) st[n].alt = v;
     else if (!strcmp(w, "jump")) st[n].jump = v;
+    else if (!strcmp(w, "look")) st[n].look = v;
     else if (!strcmp(w, "tl")) st[n].tl = v;
     else if (!strcmp(w, "tr")) st[n].tr = v;
     else if (!strcmp(w, "hurt")) P_DamageMobj(player->mo, NULL, NULL, v);       // a blow at the rider (lands on the vehicle)
@@ -1203,6 +1204,7 @@ void bgveh_TestCmd(player_t* player)
   player->cmd.forwardmove = (signed char) st[n].fwd;
   player->cmd.sidemove = (signed char) st[n].side;
   player->cmd.angleturn = (short) st[n].turn;
+  player->cmd.ex.look = (short) st[n].look;
   if (st[n].fire) player->cmd.buttons |= BT_ATTACK;
   if (one_use) player->cmd.buttons |= BT_USE;
   else player->cmd.buttons &= ~BT_USE;

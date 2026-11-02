@@ -762,6 +762,10 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
   if (D_abs(tx) > (((int64_t) tz + margin) << 2))
     return;
 
+  // Begotten: the vehicle the viewer rides in is his cockpit: its model is not drawn in his view (the camera is inside it)
+  if (bg_weapons && viewplayer && bgveh_HideFromView(thing, viewplayer))
+    return;
+
   // Begotten: a voxel prop is drawn as a model, not as a picture. It goes through the same sorting and clipping.
   if (bg_weapons && !thing->player && thing->subsector)
   {
