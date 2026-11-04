@@ -4792,12 +4792,42 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
       double wgt = k == 0 ? 3.0 : 1.0;
 
       total += wgt;
-      if (sx < 0 || sx >= viewwidth || sy < 0 || sy >= viewheight || (sy > ceilingclip[sx] && sy < floorclip[sx]))
+      // (what lies off the screen is not known: a point there counts as hidden, so a lamp whose middle has left the
+      // screen is not drawn from the clipping of the edge column, which says nothing about the lamp behind it)
+      if (sx >= 0 && sx < viewwidth && sy >= 0 && sy < viewheight && sy > ceilingclip[sx] && sy < floorclip[sx])
         seen += wgt;
     }
     vis = seen / total;
-    if (vis <= 0.05)
+    if (getenv("BEGOTTEN_HALOFORCE"))
+      vis = 1.0;
+    else if (vis <= 0.05)
       return;
+  }
+  if (H->corona && getenv("BEGOTTEN_HALOCHK"))
+  {
+    // developer check: is there a solid line between the viewer and the lamp?
+    int li;
+    double vx = bg_Fix(viewx), vy = bg_Fix(viewy), dx = H->x - vx, dy = H->y - vy;
+    static int drawn;
+
+    if (++drawn % 200 == 1)
+      fprintf(stderr, "HALOCHK: %d coronas drawn so far\n", drawn);
+
+    for (li = 0; li < numlines; ++li)
+    {
+      double ax = bg_Fix(lines[li].v1->x), ay = bg_Fix(lines[li].v1->y), bx = bg_Fix(lines[li].v2->x), by = bg_Fix(lines[li].v2->y);
+      double ex = bx - ax, ey = by - ay, den = dx * ey - dy * ex, t, u;
+
+      if (lines[li].backsector || fabs(den) < 1e-9)
+        continue;
+      t = ((ax - vx) * ey - (ay - vy) * ex) / den;
+      u = ((ax - vx) * dy - (ay - vy) * dx) / den;
+      if (t > 0.02 && t < 0.98 && u >= 0 && u <= 1)
+      {
+        fprintf(stderr, "HALOCHK: corona of the lamp at (%.0f,%.0f) drawn through line %d, vis %.2f at screen (%d,%d) tz %.0f\n", H->x, H->y, li, vis, H->cx, H->cy, H->tz);
+        break;
+      }
+    }
   }
   gr = H->col[0] * 255.0;
   gg = H->col[1] * 255.0;
