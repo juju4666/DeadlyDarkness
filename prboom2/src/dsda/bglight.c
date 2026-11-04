@@ -702,7 +702,7 @@ void bg_LightsInit(void)
     if (first_type < 0)
       first_type = defs[i].mobjtype;
   }
-  lprintf(LO_INFO, "bg_LightsInit: %d light things\n", num_defs);
+  lprintf(LO_INFO, "bg_LightsInit: %d light things (mobj types %d..%d)\n", num_defs, first_type, first_type + num_defs - 1);
 }
 
 dboolean bg_IsLightEdNum(int ednum)

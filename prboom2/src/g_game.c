@@ -1217,6 +1217,54 @@ void G_BuildTiccmd(ticcmd_t* cmd)
     if (autowalk && leveltime > 70 && leveltime < autowalk)
       cmd->forwardmove = 50;
   }
+
+  {    // developer aid: BEGOTTEN_ACSRUN=script@tic starts that ACS script once, as if a switch had been used
+    static int run_script = -2, run_tic = 0;
+    if (run_script == -2)
+    {
+      const char* e = getenv("BEGOTTEN_ACSRUN");
+      run_script = -1;
+      if (e && sscanf(e, "%d@%d", &run_script, &run_tic) < 1)
+        run_script = -1;
+    }
+    if (getenv("BEGOTTEN_QUITAT") && leveltime == atoi(getenv("BEGOTTEN_QUITAT")))
+    {
+      fprintf(stderr, "QUITAT: clean exit\n");
+      exit(0);
+    }
+    if (getenv("BEGOTTEN_TELE") && leveltime == 60 && players[0].mo)
+    {
+      int x, y, an = 0;
+      if (sscanf(getenv("BEGOTTEN_TELE"), "%d,%d,%d", &x, &y, &an) >= 2)
+      {
+        mobj_t* m = players[0].mo;
+        P_UnsetThingPosition(m);
+        m->x = x << FRACBITS; m->y = y << FRACBITS;
+        P_SetThingPosition(m);
+        m->z = m->floorz = m->subsector->sector->floorheight;
+        m->angle = (angle_t) an << 24;
+        fprintf(stderr, "TELE: player to %d %d in sector %d\n", x, y, (int)(m->subsector->sector - sectors));
+      }
+    }
+    if (run_script >= 0 && leveltime == run_tic)
+    {
+      byte args[5] = { 0, 0, 0, 0, 0 };
+      fprintf(stderr, "ACSRUN: starting script %d at tic %d\n", run_script, leveltime);
+      if (getenv("BEGOTTEN_USELINE"))
+      {
+        int i;
+        for (i = 0; i < numlines; i++)
+          if (lines[i].special == 80)
+          {
+            fprintf(stderr, "ACSRUN: using line %d\n", i);
+            P_UseSpecialLine(players[0].mo, &lines[i], 0, false);
+            break;
+          }
+      }
+      else
+      P_StartACS(run_script, 0, args, players[0].mo, NULL, 0);
+    }
+  }
 }
 
 static void G_SetInitialHealth(player_t *p)

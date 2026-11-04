@@ -132,6 +132,44 @@ static void I_SignalHandler(int s)
           buf, signal_context);
 }
 
+#ifdef _WIN32
+// A hard crash on Windows (an access violation, a stack overflow, a bad instruction) does not go through signal():
+// the process just disappears. This filter writes what happened into begotten.log (next to the .exe) before it goes:
+// the kind of crash, the address, and the call chain as "module + offset" so it can be looked up later.
+static LONG WINAPI I_WinCrashFilter(EXCEPTION_POINTERS* ep)
+{
+  static volatile LONG entered;
+  void* frames[48];
+  USHORT n, i;
+
+  if (InterlockedExchange(&entered, 1))
+    return EXCEPTION_CONTINUE_SEARCH;
+
+  lprintf(LO_ERROR, "\nCRASH: exception 0x%08lx at %p%s\n", (unsigned long) ep->ExceptionRecord->ExceptionCode,
+          ep->ExceptionRecord->ExceptionAddress,
+          ep->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW ? " (stack overflow)" : "");
+  if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2)
+    lprintf(LO_ERROR, "CRASH: %s address %p\n", ep->ExceptionRecord->ExceptionInformation[0] ? "wrote" : "read",
+            (void*) ep->ExceptionRecord->ExceptionInformation[1]);
+
+  n = CaptureStackBackTrace(0, 48, frames, NULL);
+  for (i = 0; i < n; ++i)
+  {
+    HMODULE mod = NULL;
+    char name[260];
+
+    name[0] = 0;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR) frames[i], &mod) && mod)
+      GetModuleFileNameA(mod, name, sizeof(name));
+    lprintf(LO_ERROR, "CRASH:  #%u %p  %s + 0x%lx\n", (unsigned) i, frames[i], name[0] ? name : "?",
+            mod ? (unsigned long) ((char*) frames[i] - (char*) mod) : 0ul);
+  }
+  lprintf(LO_ERROR, "CRASH: end of report\n");
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 static void I_IntHandler(int s)
 {
   interrupted = 1;
@@ -320,6 +358,10 @@ int main(int argc, char **argv)
      loud SFX noise because the sound card is
      left in an unstable state.
   */
+
+#ifdef _WIN32
+  SetUnhandledExceptionFilter(I_WinCrashFilter);
+#endif
 
   I_AtExit(I_EssentialQuit, true, "I_EssentialQuit", exit_priority_first);
   I_AtExit(I_Quit, false, "I_Quit", exit_priority_last);
