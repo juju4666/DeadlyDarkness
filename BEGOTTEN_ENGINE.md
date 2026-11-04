@@ -1236,3 +1236,13 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 
 - **The sun's floor grid knows its sectors.** 0.15.10 fixed the dark seam on a sector edge by looking toward the sun, which moved the problem: the lit sector's edge now lit a strip of the dark neighbour (a bright line along the foot of a shadowed wall). The proper fix: the grid is shifted by a fraction of a unit so no sample lies on an edge, each sample stores its sector, and floor / sprite lookups (`bg_GridAtSec`) blend only the samples that belong to the sector of the point being lit. Shadows and light now end at the sector's edge on both sides.
 - **Sun `bounce`** (`sun map MAP01 ... bounce 0.35`, also written into `begotten.wad`'s BGLIGHT lump and `make_placeholder_content.py`): each sector the sun reaches gets an ambient light of `bounce * sqrt(share of its floor in direct sun)`, in the sun's colour, over all of it (shadows too), the same mechanism as the spilled light of gyros (`bg_GlowAt`; the menu option "Light Bounce" switches both off). It is baked at the level start (sector heights moving later do not change it). Monsters and the player's hands take it too. LIGHTING.md has the table row.
+
+## UDB config: ACS line actions
+`udb/Includes/Begotten_linedefs.cfg` now lists the script actions 80 (ACS Execute), 81 (Suspend), 82 (Terminate) and 83 (Locked Execute) for the Hexen-format configuration; before, UDB showed action 80 as "Unknown" (it still worked when typed in; the engine always had it).
+
+## UDB config: the SCRIPTS lump compiles with `acc -h`
+`Begotten_Doom2Hexen.cfg` bound the `SCRIPTS` lump to `ZDoom_ACS.cfg` (so UDB compiled map scripts in ZDoom's extended format, which the engine refuses: "compiled in ZDoom's extended ACS format"), whatever script type was chosen in the Open Map dialog. It now uses `Begotten_ACS.cfg` (`acc -h`). Quick fix without the new config: put `-h` first in the `parameters` line of UDB's `Scripting/ZDoom_ACS.cfg`.
+
+## 0.15.12 - ceiling lamp
+- New light things **20109** (stationary) and **20209** (movable): a white point light (radius 480, halo and corona like the lamp) that hangs 6 units below the ceiling (`ceiling` flag, `height 6`). In the editor they hang from the ceiling like the spotlight (`hangs = 1` in `Begotten_lights.cfg`). Built-in defaults in `bglight.c`, so `begotten.wad` is unchanged.
+- Note for map makers: a light's height is part of its BGLIGHT definition (`height H` above the floor, or below the ceiling with `ceiling`). The thing's own Z (the editor's "Absolute height") does not move it.

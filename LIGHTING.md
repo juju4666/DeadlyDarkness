@@ -31,6 +31,7 @@ shines through a door, or that sits on a lift, in the movable kind. The engine w
 | 20106  | Green  | point, radius 400, height 40            | green          | slow pulse      |
 | 20107  | Red    | point, radius 400, height 40            | red            | slow pulse      |
 | 20108  | Blue   | point, radius 400, height 40            | blue           | steady          |
+| 20109  | Ceiling lamp | point, radius 480, hangs 6 units below the ceiling | white | steady (20209: movable) |
 
 Each of these has a **movable twin** with the number plus 100: 20201 torch, 20202 lamp, 20203 spot, 20204 strip,
 20205 candle, 20206 green, 20207 red, 20208 blue. Same look, but live every frame.
