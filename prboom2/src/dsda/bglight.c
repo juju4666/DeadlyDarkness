@@ -4647,7 +4647,13 @@ static void bg_HaloAdd(const double* pa, const double* pb, double size, double s
   if (corona)
   {
     // the same size on the screen at any distance (size is in pixels at the standard 320 wide view); gone when close
-    H->r = (int) (size * (double) viewwidth / 320.0 + 0.5);
+    // (the same size on the screen near the lamp; far away it shrinks a little, so that a lamp seen far off down a corridor
+    // is a small star and not a big disc that the walls around it cut into pieces)
+    double shrink = tz > 600.0 ? sqrt(600.0 / tz) : 1.0;
+
+    if (shrink < 0.45)
+      shrink = 0.45;
+    H->r = (int) (size * shrink * (double) viewwidth / 320.0 + 0.5);
     fade = (tz - cnear) / (cfar - cnear);
     fade = fade < 0 ? 0 : fade > 1.0 ? 1.0 : fade;
     if (fade <= 0)
@@ -4750,12 +4756,37 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
   const bg_halo_t* H;
   const byte* pal = cache_pal;
   int x, y, r2;
-  double gr, gg, gb;
+  double gr, gg, gb, vis;
 
   if (i < 0 || i >= num_halos || !pal || !nearest_cube)
     return;
   H = &halos[i];
   r2 = H->r * H->r;
+  vis = 1.0;
+  if (H->corona)
+  {
+    // A corona is not cut by the walls in front of it column by column (that makes it slide behind pillars in hard
+    // slices). How much of the lamp can be seen is measured at the middle and at eight points around it; the whole corona
+    // is dimmed by that share, so it fades out smoothly as the lamp goes behind an edge and then glows over the edge.
+    static const int ox[9] = { 0, 1, -1, 0, 0, 1, 1, -1, -1 }, oy[9] = { 0, 0, 0, 1, -1, 1, -1, 1, -1 };
+    double seen = 0, total = 0;
+    int k;
+
+    for (k = 0; k < 9; ++k)
+    {
+      int sx = H->cx + ox[k] * H->r / 2, sy = H->cy + oy[k] * H->r / 2;
+      double wgt = k == 0 ? 3.0 : 1.0;
+
+      total += wgt;
+      if (sx < 0 || sx >= viewwidth || sy < 0 || sy >= viewheight || (sy > ceilingclip[sx] && sy < floorclip[sx]))
+        seen += wgt;
+    }
+    vis = seen / total;
+    if (H->cx >= 0 && H->cx < viewwidth && !(H->cy > ceilingclip[H->cx] && H->cy < floorclip[H->cx]) && vis > 0.35)
+      vis = 0.35;                    // the very middle is hidden: at most a faint glow around the edge
+    if (vis <= 0.02)
+      return;
+  }
   gr = H->col[0] * 255.0;
   gg = H->col[1] * 255.0;
   gb = H->col[2] * 255.0;
@@ -4768,8 +4799,11 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
     half = (int) sqrt((double) (r2 - dx * dx));
     y0 = H->cy - half;
     y1 = H->cy + half;
-    if (y0 <= ceilingclip[x]) y0 = ceilingclip[x] + 1;
-    if (y1 >= floorclip[x]) y1 = floorclip[x] - 1;
+    if (!H->corona)
+    {
+      if (y0 <= ceilingclip[x]) y0 = ceilingclip[x] + 1;
+      if (y1 >= floorclip[x]) y1 = floorclip[x] - 1;
+    }
     if (y0 < 0) y0 = 0;
     if (y1 >= viewheight) y1 = viewheight - 1;
     for (y = y0; y <= y1; ++y)
@@ -4787,7 +4821,7 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
         double core = exp(-rr * 14.0), body = t * t * 0.35;
         double streak = (1.0 - ax) * exp(-ay * ay * 900.0 / (double) r2 * 8.0) * 0.55 + (1.0 - ay) * exp(-ax * ax * 900.0 / (double) r2 * 8.0) * 0.55;
 
-        a = H->a * (core + body + (streak > 0 ? streak * streak : 0));
+        a = H->a * vis * (core + body + (streak > 0 ? streak * streak : 0));
         if (a > 1.0)
           a = 1.0;
       }

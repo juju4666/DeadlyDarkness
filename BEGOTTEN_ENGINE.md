@@ -1256,3 +1256,9 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 - **UDB config**: `Begotten_Doom2Hexen.cfg` lacked `linedefactivationsfilter = 7168`, so the editor never read or wrote the trigger bits (flags 0x1C00) of a Hexen-format line: "Player uses" fell back to "Player walks over" after reopening the map. Fixed. Lines already saved wrongly must have their trigger set again once. Copy the new cfg into UDB's Configurations folder. (Not run inside UDB; the key is the one UDB's stock Hexen-format configs use.)
 - **Shadows after a moving sector**: the baked sun and stationary lights are baked again once a sector's floor or ceiling has moved and been still for 10 tics (at most one re-bake per second, 64 per level; about 30 ms on the test level). The shutter bars lifted by the security script no longer leave their shadows. Checked on Linux with the user's MAP01 (124 sun samples change after the script). A light that hangs from a moving ceiling moves with it.
 - A rebake logs `BGLIGHT: sectors moved, baking again`.
+
+## 0.15.15 - coronas
+- A corona is no longer cut column by column by the walls in front of it (it slid behind pillars in hard slices). The lamp's visibility is sampled at its middle and eight points around it, and the whole corona fades by that share, so it dims smoothly behind an edge and glows over it; with the very middle hidden it is at most a faint glow.
+- Far away the corona shrinks (beyond 600 units, to a minimum of 45%), so a distant lamp is a small star and not a large disc cut up by the geometry around it.
+- Light things stay invisible by design (the sprite shown in UDB is an editor marker). For a visible lamp body, place a Floor Lamp (2028) beside the light; there is no ceiling lamp sprite yet.
+- Checked only for crashes on Linux; the look has not been viewed.
