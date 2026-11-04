@@ -1227,6 +1227,8 @@ void G_BuildTiccmd(ticcmd_t* cmd)
       if (e && sscanf(e, "%d@%d", &run_script, &run_tic) < 1)
         run_script = -1;
     }
+    if (getenv("BEGOTTEN_SHOT") && leveltime == atoi(getenv("BEGOTTEN_SHOT")))
+      M_ScreenShot();
     if (getenv("BEGOTTEN_QUITAT") && leveltime == atoi(getenv("BEGOTTEN_QUITAT")))
     {
       fprintf(stderr, "QUITAT: clean exit\n");

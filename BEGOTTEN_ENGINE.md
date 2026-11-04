@@ -1265,3 +1265,8 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 
 ## 0.15.16 - corona no longer shows through walls
 - 0.15.15 drew the corona over the walls in front of it, so it showed through several walls. The walls cut it again (per column, as before); what stays from 0.15.15: it dims by the share of the lamp that can be seen, it is not drawn when its middle is hidden, and it shrinks a little far away.
+
+## 0.15.17 - corona seen through bars and pillars
+- The corona is no longer cut column by column by what stands in front of it (bars made it look sliced). How much of the lamp can be seen is sampled at its middle and eight points close around it (a quarter of the corona's radius): none seen, no corona (a wall, however many, hides it completely); part seen, the corona dims by that share and shows whole, fainter (30%) where something nearer is in front of it.
+- Developer aid: `BEGOTTEN_SHOT=tic` takes a screenshot (dsda0000.png in the working directory), together with `BEGOTTEN_TELE`, `BEGOTTEN_ACSRUN`, `BEGOTTEN_QUITAT`, for unattended looks at a map.
+- Seen on screenshots of the user's MAP01 on Linux (lamp behind the shutter bars, lamp beside a pillar): a whole disc, no slices. Not seen: far distances, GL mode, other lamps.

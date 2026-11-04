@@ -4765,16 +4765,17 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
   vis = 1.0;
   if (H->corona)
   {
-    // The walls in front of a corona still cut it (it never shows through a wall), but it also dims by the share of the lamp
-    // that can be seen (the middle and eight points around it), so it fades out as the lamp goes behind an edge instead of
-    // being sliced at full strength; with the middle hidden it is not drawn at all.
+    // How much of the lamp can be seen decides how bright its corona is (the middle and eight points close around it,
+    // about a quarter of the corona's radius away). Behind a wall nothing is seen and no corona is drawn, however big it
+    // is; behind a bar or a pillar edge it dims by the share hidden, and the glow spreads over the bar (a thin
+    // bar does not cut a glow into slices) but fainter where something nearer is in front of it.
     static const int ox[9] = { 0, 1, -1, 0, 0, 1, 1, -1, -1 }, oy[9] = { 0, 0, 0, 1, -1, 1, -1, 1, -1 };
     double seen = 0, total = 0;
-    int k;
+    int k, off = H->r / 4 > 2 ? H->r / 4 : 2;
 
     for (k = 0; k < 9; ++k)
     {
-      int sx = H->cx + ox[k] * H->r / 2, sy = H->cy + oy[k] * H->r / 2;
+      int sx = H->cx + ox[k] * off, sy = H->cy + oy[k] * off;
       double wgt = k == 0 ? 3.0 : 1.0;
 
       total += wgt;
@@ -4782,9 +4783,7 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
         seen += wgt;
     }
     vis = seen / total;
-    if (H->cx >= 0 && H->cx < viewwidth && !(H->cy > ceilingclip[H->cx] && H->cy < floorclip[H->cx]))
-      return;                        // the very middle is hidden: nothing of it shows (never through a wall)
-    if (vis <= 0.02)
+    if (vis <= 0.05)
       return;
   }
   gr = H->col[0] * 255.0;
@@ -4799,8 +4798,11 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
     half = (int) sqrt((double) (r2 - dx * dx));
     y0 = H->cy - half;
     y1 = H->cy + half;
-    if (y0 <= ceilingclip[x]) y0 = ceilingclip[x] + 1;
-    if (y1 >= floorclip[x]) y1 = floorclip[x] - 1;
+    if (!H->corona)
+    {
+      if (y0 <= ceilingclip[x]) y0 = ceilingclip[x] + 1;
+      if (y1 >= floorclip[x]) y1 = floorclip[x] - 1;
+    }
     if (y0 < 0) y0 = 0;
     if (y1 >= viewheight) y1 = viewheight - 1;
     for (y = y0; y <= y1; ++y)
@@ -4821,6 +4823,8 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
         a = H->a * vis * (core + body + (streak > 0 ? streak * streak : 0));
         if (a > 1.0)
           a = 1.0;
+        if (!(y > ceilingclip[x] && y < floorclip[x]))
+          a *= 0.3;                  // in front of it there is something nearer: only a faint bloom over its edge
       }
       else
         a = H->a * t * t * t;
