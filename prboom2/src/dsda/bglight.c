@@ -102,6 +102,7 @@ typedef struct
   double flick_depth;              // how far it dims: 0.3 = down to 70%
   double flick_period;             // pulse: seconds per cycle
   int tint;                        // 0 = white
+  int body;                        // doomednum of a plain decoration whose picture this light shows (BGLIGHT `body`; 0 = none)
   int mobjtype;
   dboolean movable;                // live every frame (lifts, doors...) instead of baked into the level
   double halo;                     // size of the glow drawn round the light, in map units (0 = none)
@@ -164,24 +165,24 @@ static const char bg_default_lights[] =
   "color amber 255 170 50\n"
   "# light DOOMED NAME radius R strength S height H [color NAME] [flags]   (20101-20108 are STATIONARY: baked\n"
   "# into the level with real shadows; add the flag `movable` for a light that must change every frame)\n"
-  "light 20101 torch  halo 36 corona 16 radius 320 strength 0.9 height 48 color warm flicker\n"
-  "light 20102 lamp   halo 44 corona 20 radius 480 strength 1.0 height 32\n"
+  "light 20101 torch  halo 36 corona 16 radius 320 strength 0.9 height 48 color warm flicker body 46\n"
+  "light 20102 lamp   halo 44 corona 20 radius 480 strength 1.0 height 32 body 85\n"
   "light 20103 spot   radius 640 strength 1.0 height 24 ceiling spot 25 50 pitch -90\n"
   "light 20104 strip  radius 384 strength 1.0 height 8 ceiling tube 128 spot 40 85 pitch -90 color cool\n"
-  "light 20105 candle halo 20 corona 9 radius 200 strength 0.8 height 20 color candle flicker\n"
-  "light 20106 green  halo 40 corona 16 radius 400 strength 0.9 height 40 color green pulse\n"
-  "light 20107 red    halo 40 corona 16 radius 400 strength 0.9 height 40 color red pulse\n"
-  "light 20108 blue   halo 40 corona 16 radius 400 strength 0.9 height 40 color blue\n"
+  "light 20105 candle halo 20 corona 9 radius 200 strength 0.8 height 20 color candle flicker body 34\n"
+  "light 20106 green  halo 40 corona 16 radius 400 strength 0.9 height 40 color green pulse body 45\n"
+  "light 20107 red    halo 40 corona 16 radius 400 strength 0.9 height 40 color red pulse body 46\n"
+  "light 20108 blue   halo 40 corona 16 radius 400 strength 0.9 height 40 color blue body 44\n"
   "light 20109 ceiling_lamp   halo 44 corona 20 radius 480 strength 1.0 height 6 ceiling\n"
   "# the same lights again as MOVABLE (20201-20208): live every frame, for lights on lifts and doors\n"
-  "light 20201 torch_m  halo 36 corona 16 radius 320 strength 0.9 height 48 color warm flicker movable\n"
-  "light 20202 lamp_m   halo 44 corona 20 radius 480 strength 1.0 height 32 movable\n"
+  "light 20201 torch_m  halo 36 corona 16 radius 320 strength 0.9 height 48 color warm flicker movable body 46\n"
+  "light 20202 lamp_m   halo 44 corona 20 radius 480 strength 1.0 height 32 movable body 85\n"
   "light 20203 spot_m   radius 640 strength 1.0 height 24 ceiling spot 25 50 pitch -90 movable\n"
   "light 20204 strip_m  radius 384 strength 1.0 height 8 ceiling tube 128 spot 40 85 pitch -90 color cool movable\n"
-  "light 20205 candle_m halo 20 corona 9 radius 200 strength 0.8 height 20 color candle flicker movable\n"
-  "light 20206 green_m  halo 40 corona 16 radius 400 strength 0.9 height 40 color green pulse movable\n"
-  "light 20207 red_m    halo 40 corona 16 radius 400 strength 0.9 height 40 color red pulse movable\n"
-  "light 20208 blue_m   halo 40 corona 16 radius 400 strength 0.9 height 40 color blue movable\n"
+  "light 20205 candle_m halo 20 corona 9 radius 200 strength 0.8 height 20 color candle flicker movable body 34\n"
+  "light 20206 green_m  halo 40 corona 16 radius 400 strength 0.9 height 40 color green pulse movable body 45\n"
+  "light 20207 red_m    halo 40 corona 16 radius 400 strength 0.9 height 40 color red pulse movable body 46\n"
+  "light 20208 blue_m   halo 40 corona 16 radius 400 strength 0.9 height 40 color blue movable body 44\n"
   "light 20209 ceiling_lamp_m halo 44 corona 20 radius 480 strength 1.0 height 6 ceiling movable\n"
   "# gyro lights (20301-20303): a beam that turns round, like an emergency beacon. Always movable. `spin` is degrees per second\n"
   "# (negative turns the other way; a placed gyro's first argument sets it, in tens of degrees per second); `glow RADIUS STRENGTH`\n"
@@ -410,6 +411,7 @@ static void bg_ParseLightText(const char* text_in)
         if (!strcasecmp(w, "ceiling")) d.from_ceiling = true;
         else if (!strcasecmp(w, "movable")) d.movable = true;
         else if (!strcasecmp(w, "shadow")) d.shadow = true;
+        else if (!strcasecmp(w, "body") && (v = strtok_r(NULL, " \t\r", &save))) d.body = atoi(v);
         else if (!strcasecmp(w, "bounce") && (v = strtok_r(NULL, " \t\r", &save))) d.bounce = atof(v);
         else if (!strcasecmp(w, "flicker")) d.flicker = 1;
         else if (!strcasecmp(w, "pulse")) d.flicker = 2;
@@ -691,6 +693,19 @@ void bg_LightsInit(void)
 
     info.doomednum = defs[i].doomednum;
     info.spawnstate = S_TNT1;
+    if (defs[i].body > 0)
+    {
+      int k;
+
+      // the picture of a plain decoration (torch, lamp, candle...): the light's own thing stays non-solid and invisible to
+      // everything else; only its frames are borrowed
+      for (k = 0; k < DOOM_NUMMOBJTYPES && k < num_mobj_types; ++k)
+        if (mobjinfo[k].doomednum == defs[i].body && mobjinfo[k].spawnstate > 0)
+        {
+          info.spawnstate = mobjinfo[k].spawnstate;
+          break;
+        }
+    }
     info.seestate = info.painstate = info.meleestate = info.missilestate = info.deathstate = info.xdeathstate = S_NULL;
     info.raisestate = S_NULL;
     info.flags = MF_NOBLOCKMAP | MF_NOGRAVITY;

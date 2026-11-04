@@ -1279,3 +1279,9 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 ## 0.15.19 - corona through walls at the screen edge
 - A corona whose lamp had turned just off the side of the screen was still drawn: the points sampled off-screen counted as "seen", and the clipping of the edge column says nothing about a lamp behind a wall. Points off the screen now count as hidden.
 - Developer check `BEGOTTEN_HALOCHK=1` (with `BEGOTTEN_SPIN=1` turning the player and `BEGOTTEN_TELE`) logs every corona drawn with a solid one-sided line between it and the viewer (`BEGOTTEN_HALOFORCE=1` switches the visibility test off, to prove the check works). On the user's MAP01, spinning a full turn at four spots: 0 coronas through walls (with the test off: 925). Doors and closed sectors are not counted by this check.
+
+## 0.15.20 - lamp bodies
+- The light things used to be invisible (only their light and corona showed; the sprite in UDB was an editor marker). They now show the picture of a plain decoration, chosen by the new BGLIGHT word `body <doomednum>` (the light thing itself stays non-solid; only the frames are borrowed). Defaults, the same pictures as the UDB markers: torch and red light 46 (tall red torch), lamp 85 (tall tech lamp), candle 34, green 45, blue 44, for the stationary and the movable lights. Spotlights, strip lights, beacons and the ceiling lamp have no body (no hanging-lamp picture exists yet). `body 0` in the BGLIGHT lump of a map or the game wad turns a body off.
+- Correction to 0.15.15's note: for a plain lamp placed by hand the things are 85 (tall tech lamp) and 86 (short tech lamp); 2028 is the column.
+- A light switched off (Thing_Deactivate) keeps showing its lamp picture, which is lit; only the light and corona go.
+- Seen on a screenshot of the Gallery of Lights on Linux.
