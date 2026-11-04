@@ -1606,7 +1606,10 @@ static void R_DrawSprite (vissprite_t* spr)
   int     r2;
   fixed_t scale;
   fixed_t lowscale;
+  fixed_t clipscale = spr->scale;      // Begotten: what the walls are compared with (see bg_HaloClipScale)
 
+  if (spr->bg_halo)
+    clipscale = bg_HaloClipScale(spr->bg_halo - 1);
   for (x = spr->x1 ; x<=spr->x2 ; x++)
     clipbot[x] = -2;
   for (x = spr->x1 ; x<=spr->x2 ; x++)
@@ -1643,7 +1646,7 @@ static void R_DrawSprite (vissprite_t* spr)
         scale = ds->scale2;
       }
 
-      if (scale < spr->scale || (lowscale < spr->scale &&
+      if (scale < clipscale || (lowscale < clipscale &&
         !R_PointOnSegSide (spr->gx, spr->gy, ds->curline)))
       {
         if (ds->maskedtexturecol)       // masked mid texture?

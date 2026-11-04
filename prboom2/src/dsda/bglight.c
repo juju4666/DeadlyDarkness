@@ -4751,6 +4751,19 @@ dboolean bg_HaloGet(int i, int* x1, int* x2, fixed_t* scale, fixed_t* gx, fixed_
   return true;
 }
 
+// The distance a halo counts as having when it is cut by the walls in front of it (not when it is sorted with other things):
+// a corona counts as nearer than it is by 40 map units, so that the wall a lamp stands against does not cut it where that
+// wall runs towards the viewer; only things well in front hide it.
+fixed_t bg_HaloClipScale(int i)
+{
+  const bg_halo_t* H;
+
+  if (i < 0 || i >= num_halos)
+    return 0;
+  H = &halos[i];
+  return (fixed_t) (bg_Fix(projectiony) / (H->corona && H->tz > 80.0 ? H->tz - 40.0 : H->tz) * 65536.0 * 0.98);
+}
+
 void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
 {
   const bg_halo_t* H;
@@ -4823,8 +4836,20 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
         a = H->a * vis * (core + body + (streak > 0 ? streak * streak : 0));
         if (a > 1.0)
           a = 1.0;
-        if (!(y > ceilingclip[x] && y < floorclip[x]))
-          a *= 0.3;                  // in front of it there is something nearer: only a faint bloom over its edge
+        {
+          // where something nearer is in front of it only a faint bloom shows, and the change from clear to covered is
+          // spread over a few pixels (the share of nearby points that are covered) instead of a hard edge
+          int k, clear = 0, wd = H->r / 6 > 3 ? H->r / 6 : 3;
+
+          for (k = -3; k <= 3; ++k)
+          {
+            int sx = x + k * wd;
+
+            if (sx < 0 || sx >= viewwidth || (y > ceilingclip[sx] && y < floorclip[sx]))
+              ++clear;
+          }
+          a *= 0.3 + 0.7 * (double) clear / 7.0;
+        }
       }
       else
         a = H->a * t * t * t;

@@ -52,6 +52,7 @@ int bg_LightTypeFor(int doomednum);   // the mobj type of a light thing, -1 if n
 
 // Stationary lights are baked into the level (with line-of-sight shadows) the first frame after a level starts.
 void bg_LightsNewLevel(void);   // call when a level has been set up
+fixed_t bg_HaloClipScale(int i);   // the scale a halo is clipped with (see bglight.c)
 void bg_LightsBake(void);       // (re)bake now: the stationary light things that exist
 dboolean bg_LightLos(double lx, double ly, double lz, double tx, double ty, double tz);   // self test: can light go from A to B?
 int bg_LightBakedCount(void);

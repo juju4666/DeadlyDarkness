@@ -1270,3 +1270,8 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 - The corona is no longer cut column by column by what stands in front of it (bars made it look sliced). How much of the lamp can be seen is sampled at its middle and eight points close around it (a quarter of the corona's radius): none seen, no corona (a wall, however many, hides it completely); part seen, the corona dims by that share and shows whole, fainter (30%) where something nearer is in front of it.
 - Developer aid: `BEGOTTEN_SHOT=tic` takes a screenshot (dsda0000.png in the working directory), together with `BEGOTTEN_TELE`, `BEGOTTEN_ACSRUN`, `BEGOTTEN_QUITAT`, for unattended looks at a map.
 - Seen on screenshots of the user's MAP01 on Linux (lamp behind the shutter bars, lamp beside a pillar): a whole disc, no slices. Not seen: far distances, GL mode, other lamps.
+
+## 0.15.18 - corona cut by the wall behind it
+- A lamp standing against a wall that runs towards the viewer had its corona cut in a straight vertical line: the wall on the near side of the lamp counted as "in front" of it. The walls are now compared with the corona as if it were 40 map units nearer (`bg_HaloClipScale`); only things well in front hide it. Its place among other things (bikes, monsters) is unchanged.
+- The change from clear to covered, where something nearer is in front, is spread over a few pixels (seven samples across).
+- Seen on screenshots of the Gallery of Lights (MAP01 of the game wad) on Linux.
