@@ -290,8 +290,9 @@ light of the floor they stand on. Ceilings are never lit. The sun adds to the se
 lights; a dark room with a window is a good use. Open skies get nothing special: the sector light level is what
 outdoor floors have in the shade.
 
-Limits: one sun per level; it does not move (no day cycle); sector and door movement after the level starts does not
-change it (a door that opens will not let the sun in); only real sky ceilings count, not "outdoor" tricks such as a
+Limits: one sun per level; it does not move (no day cycle); when a sector's floor or ceiling moves (a shutter that opens, a lift) the sun and the stationary lights are baked
+again about a third of a second after it stops (at most once a second, 64 times per level), so shadows follow the new
+heights (a baked-again light that hangs from a moving ceiling moves with it); only real sky ceilings count, not "outdoor" tricks such as a
 very high ceiling; the bake grid is 8 map units, coarser (16, 32...) for very large levels, so a shadow edge is
 about that soft. The bake takes about 10 ms for the Gallery of Lights.
 

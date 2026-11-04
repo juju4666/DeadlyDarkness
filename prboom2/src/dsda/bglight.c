@@ -330,6 +330,7 @@ static int sv[BG_MAXSTATIC], num_sv;
 static bg_seglay_t* seglay;
 static int seglay_n;
 static int level_serial, bake_serial = -1;
+static dboolean bg_SectorsMovedSinceBake(void);
 static BG_TLS unsigned* line_seen;      // (per thread: which lines this thread's ray has already looked at)
 static BG_TLS int line_seen_n;
 static BG_TLS unsigned ray_id;
@@ -1348,6 +1349,11 @@ void bg_LightsBeginFrame(void)
   ++frame_id;
   for (i = 0; i < BG_MAXLIGHTS; ++i)
     lights[i].stamp = stamps[i];
+  if (bake_serial == level_serial && bg_SectorsMovedSinceBake())
+  {
+    lprintf(LO_INFO, "BGLIGHT: sectors moved, baking again\n");
+    bake_serial = -1;
+  }
   if (bake_serial != level_serial)
     bg_LightsBake();
 
@@ -3162,6 +3168,97 @@ static int bg_BakeWarnings(void)
   return bake_warnings;
 }
 
+// What the sectors looked like when the baked light and sun were made. A sector that moves afterwards (a shutter that
+// opens, a lift) makes the shadows and the sun's lit places wrong, so once such a movement has settled the bake is
+// done again (about a tenth of a second on a big level; limited to one every second and 64 per level).
+static fixed_t* bake_floor;
+static fixed_t* bake_ceil;
+static int bake_secs;
+static int moved_tic = -1000000;
+static int last_rebake_tic = -1000000;
+static int rebakes_done;
+static int rebakes_level = -1;
+
+static void bg_NoteBakedHeights(void)
+{
+  int i;
+
+  free(bake_floor);
+  free(bake_ceil);
+  bake_floor = bake_ceil = NULL;
+  bake_secs = 0;
+  if (numsectors <= 0)
+    return;
+  bake_floor = malloc(sizeof(fixed_t) * numsectors);
+  bake_ceil = malloc(sizeof(fixed_t) * numsectors);
+  if (!bake_floor || !bake_ceil)
+  {
+    free(bake_floor);
+    free(bake_ceil);
+    bake_floor = bake_ceil = NULL;
+    return;
+  }
+  for (i = 0; i < numsectors; ++i)
+  {
+    bake_floor[i] = sectors[i].floorheight;
+    bake_ceil[i] = sectors[i].ceilingheight;
+  }
+  bake_secs = numsectors;
+}
+
+// called at the start of every frame; true when the bake must be redone now
+static dboolean bg_SectorsMovedSinceBake(void)
+{
+  static fixed_t* prev_floor;
+  static fixed_t* prev_ceil;
+  static int prev_n;
+  int i;
+  dboolean differs = false, moving = false;
+
+  if (rebakes_level != level_serial)
+  {
+    rebakes_level = level_serial;
+    rebakes_done = 0;
+    last_rebake_tic = -1000000;
+    moved_tic = -1000000;
+  }
+  if (!bake_floor || bake_secs != numsectors || num_sl <= 0 || rebakes_done >= 64)
+    return false;
+  if (prev_n != numsectors)
+  {
+    free(prev_floor);
+    free(prev_ceil);
+    prev_floor = malloc(sizeof(fixed_t) * numsectors);
+    prev_ceil = malloc(sizeof(fixed_t) * numsectors);
+    prev_n = prev_floor && prev_ceil ? numsectors : 0;
+    if (!prev_n)
+      return false;
+    for (i = 0; i < numsectors; ++i)
+    {
+      prev_floor[i] = sectors[i].floorheight;
+      prev_ceil[i] = sectors[i].ceilingheight;
+    }
+  }
+  for (i = 0; i < numsectors; ++i)
+  {
+    if (sectors[i].floorheight != bake_floor[i] || sectors[i].ceilingheight != bake_ceil[i])
+      differs = true;
+    if (sectors[i].floorheight != prev_floor[i] || sectors[i].ceilingheight != prev_ceil[i])
+    {
+      moving = true;
+      prev_floor[i] = sectors[i].floorheight;
+      prev_ceil[i] = sectors[i].ceilingheight;
+    }
+  }
+  if (moving)
+    moved_tic = leveltime;
+  if (!differs || leveltime - moved_tic < 10 || leveltime - last_rebake_tic < 35)
+    return false;
+  last_rebake_tic = leveltime;
+  ++rebakes_done;
+  return true;
+}
+
 static void bg_BakeFree(void)
 {
   int k, s, j;
@@ -3267,6 +3364,7 @@ void bg_LightsBake(void)
   }
   bg_BakeWarnings();
   bg_BakeSun();
+  bg_NoteBakedHeights();
   lprintf(LO_INFO, "BGLIGHT: baked %d stationary lights in %.0f ms%s\n", num_sl, 1000.0 * (double) (clock() - t0) / CLOCKS_PER_SEC,
           bake_warnings ? " (see the warnings above)" : "");
 }
