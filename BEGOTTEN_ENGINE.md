@@ -1262,3 +1262,6 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 - Far away the corona shrinks (beyond 600 units, to a minimum of 45%), so a distant lamp is a small star and not a large disc cut up by the geometry around it.
 - Light things stay invisible by design (the sprite shown in UDB is an editor marker). For a visible lamp body, place a Floor Lamp (2028) beside the light; there is no ceiling lamp sprite yet.
 - Checked only for crashes on Linux; the look has not been viewed.
+
+## 0.15.16 - corona no longer shows through walls
+- 0.15.15 drew the corona over the walls in front of it, so it showed through several walls. The walls cut it again (per column, as before); what stays from 0.15.15: it dims by the share of the lamp that can be seen, it is not drawn when its middle is hidden, and it shrinks a little far away.

@@ -4765,9 +4765,9 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
   vis = 1.0;
   if (H->corona)
   {
-    // A corona is not cut by the walls in front of it column by column (that makes it slide behind pillars in hard
-    // slices). How much of the lamp can be seen is measured at the middle and at eight points around it; the whole corona
-    // is dimmed by that share, so it fades out smoothly as the lamp goes behind an edge and then glows over the edge.
+    // The walls in front of a corona still cut it (it never shows through a wall), but it also dims by the share of the lamp
+    // that can be seen (the middle and eight points around it), so it fades out as the lamp goes behind an edge instead of
+    // being sliced at full strength; with the middle hidden it is not drawn at all.
     static const int ox[9] = { 0, 1, -1, 0, 0, 1, 1, -1, -1 }, oy[9] = { 0, 0, 0, 1, -1, 1, -1, 1, -1 };
     double seen = 0, total = 0;
     int k;
@@ -4782,8 +4782,8 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
         seen += wgt;
     }
     vis = seen / total;
-    if (H->cx >= 0 && H->cx < viewwidth && !(H->cy > ceilingclip[H->cx] && H->cy < floorclip[H->cx]) && vis > 0.35)
-      vis = 0.35;                    // the very middle is hidden: at most a faint glow around the edge
+    if (H->cx >= 0 && H->cx < viewwidth && !(H->cy > ceilingclip[H->cx] && H->cy < floorclip[H->cx]))
+      return;                        // the very middle is hidden: nothing of it shows (never through a wall)
     if (vis <= 0.02)
       return;
   }
@@ -4799,11 +4799,8 @@ void bg_DrawHalo(int i, const int* floorclip, const int* ceilingclip)
     half = (int) sqrt((double) (r2 - dx * dx));
     y0 = H->cy - half;
     y1 = H->cy + half;
-    if (!H->corona)
-    {
-      if (y0 <= ceilingclip[x]) y0 = ceilingclip[x] + 1;
-      if (y1 >= floorclip[x]) y1 = floorclip[x] - 1;
-    }
+    if (y0 <= ceilingclip[x]) y0 = ceilingclip[x] + 1;
+    if (y1 >= floorclip[x]) y1 = floorclip[x] - 1;
     if (y0 < 0) y0 = 0;
     if (y1 >= viewheight) y1 = viewheight - 1;
     for (y = y0; y <= y1; ++y)
