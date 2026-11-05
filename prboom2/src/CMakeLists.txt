@@ -600,8 +600,10 @@ function(AddGameExecutable TARGET SOURCES)
 
     if(MSVC)
         set_target_properties(${TARGET} PROPERTIES
-            LINK_FLAGS "/MANIFEST:NO /SUBSYSTEM:CONSOLE"
+            LINK_FLAGS "/MANIFEST:NO /SUBSYSTEM:CONSOLE /DEBUG /OPT:REF /OPT:ICF"
         )
+        # debug information for crash reports (begotten.pdb is packaged next to begotten.exe; see I_WinCrashFilter)
+        target_compile_options(${TARGET} PRIVATE /Zi)
         add_custom_command(TARGET ${TARGET} POST_BUILD
             COMMAND "mt.exe" -manifest \"${CMAKE_CURRENT_SOURCE_DIR}\\..\\ICONS\\dsda-doom.exe.manifest\" -outputresource:\"$<TARGET_FILE:dsda-doom>\"\;\#1
         )
@@ -625,6 +627,9 @@ function(AddGameExecutable TARGET SOURCES)
         )
     else()
         install(TARGETS ${TARGET} RUNTIME DESTINATION "${DSDA_INSTALL_BINDIR}")
+    endif()
+    if(MSVC)
+        install(FILES $<TARGET_PDB_FILE:${TARGET}> DESTINATION "${DSDA_INSTALL_BINDIR}" OPTIONAL)
     endif()
 endfunction()
 

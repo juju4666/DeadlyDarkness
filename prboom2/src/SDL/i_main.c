@@ -136,11 +136,18 @@ static void I_SignalHandler(int s)
 // A hard crash on Windows (an access violation, a stack overflow, a bad instruction) does not go through signal():
 // the process just disappears. This filter writes what happened into begotten.log (next to the .exe) before it goes:
 // the kind of crash, the address, and the call chain as "module + offset" so it can be looked up later.
+#ifdef _MSC_VER
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
+
 static LONG WINAPI I_WinCrashFilter(EXCEPTION_POINTERS* ep)
 {
   static volatile LONG entered;
   void* frames[48];
   USHORT n, i;
+  int sym_ok = 0;
+  (void) sym_ok;
 
   if (InterlockedExchange(&entered, 1))
     return EXCEPTION_CONTINUE_SEARCH;
@@ -152,6 +159,21 @@ static LONG WINAPI I_WinCrashFilter(EXCEPTION_POINTERS* ep)
     lprintf(LO_ERROR, "CRASH: %s address %p\n", ep->ExceptionRecord->ExceptionInformation[0] ? "wrote" : "read",
             (void*) ep->ExceptionRecord->ExceptionInformation[1]);
 
+#ifdef _MSC_VER
+  // with begotten.pdb next to begotten.exe the frames get function names and line numbers
+  {
+    char dir[MAX_PATH];
+    char* slash;
+
+    dir[0] = 0;
+    GetModuleFileNameA(NULL, dir, sizeof(dir));
+    slash = strrchr(dir, '\\');
+    if (slash)
+      *slash = 0;
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+    sym_ok = SymInitialize(GetCurrentProcess(), dir[0] ? dir : NULL, TRUE);
+  }
+#endif
   n = CaptureStackBackTrace(0, 48, frames, NULL);
   for (i = 0; i < n; ++i)
   {
@@ -164,6 +186,29 @@ static LONG WINAPI I_WinCrashFilter(EXCEPTION_POINTERS* ep)
       GetModuleFileNameA(mod, name, sizeof(name));
     lprintf(LO_ERROR, "CRASH:  #%u %p  %s + 0x%lx\n", (unsigned) i, frames[i], name[0] ? name : "?",
             mod ? (unsigned long) ((char*) frames[i] - (char*) mod) : 0ul);
+#ifdef _MSC_VER
+    if (sym_ok)
+    {
+      union { SYMBOL_INFO si; char raw[sizeof(SYMBOL_INFO) + 256]; } u;
+      DWORD64 disp = 0;
+      DWORD ldisp = 0;
+      IMAGEHLP_LINE64 line;
+
+      memset(&u, 0, sizeof(u));
+      u.si.SizeOfStruct = sizeof(SYMBOL_INFO);
+      u.si.MaxNameLen = 255;
+      memset(&line, 0, sizeof(line));
+      line.SizeOfStruct = sizeof(line);
+      if (SymFromAddr(GetCurrentProcess(), (DWORD64) (ULONG_PTR) frames[i], &disp, &u.si))
+      {
+        if (SymGetLineFromAddr64(GetCurrentProcess(), (DWORD64) (ULONG_PTR) frames[i], &ldisp, &line))
+          lprintf(LO_ERROR, "CRASH:      %s + 0x%llx  (%s:%lu)\n", u.si.Name, (unsigned long long) disp, line.FileName,
+                  (unsigned long) line.LineNumber);
+        else
+          lprintf(LO_ERROR, "CRASH:      %s + 0x%llx\n", u.si.Name, (unsigned long long) disp);
+      }
+    }
+#endif
   }
   lprintf(LO_ERROR, "CRASH: end of report\n");
   return EXCEPTION_CONTINUE_SEARCH;

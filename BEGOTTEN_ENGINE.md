@@ -1285,3 +1285,7 @@ player 2 (with `BEGOTTEN_LOCALPLAYERS=2`); `tools/make_vehicle_test_map.py` now 
 - Correction to 0.15.15's note: for a plain lamp placed by hand the things are 85 (tall tech lamp) and 86 (short tech lamp); 2028 is the column.
 - A light switched off (Thing_Deactivate) keeps showing its lamp picture, which is lit; only the light and corona go.
 - Seen on a screenshot of the Gallery of Lights on Linux.
+
+## 0.15.21 - crash report with function names (Windows)
+- First crash report from Windows (0.15.20, the user's MAP01 after the security switch): `0xc0000005`, read of address 0 (a null pointer), on the main thread (not a rendering thread), about 40 s after the switch, inside the game loop; the light re-bake (`sectors moved, baking again`, 72 ms) had run normally. The report only had offsets into begotten.exe (`+0x696d0`, called from `+0x6935c`, `+0x6b6b9`, `+0x60bb8`, `+0x5cb5b`, `+0x69c22`, `+0x66098`, `+0x55b12`), which cannot be turned into function names without the build's symbols. Not reproduced on Linux (a 2800-tic run with the switch, spinning, on the same map).
+- The MSVC build now keeps its debug information (`/Zi`, `/DEBUG`, `/OPT:REF /OPT:ICF`) and packages `begotten.pdb` next to `begotten.exe`; the crash report loads it through DbgHelp and adds function names and file:line to every frame. Keep begotten.pdb in the same folder as begotten.exe. Untested: written without an MSVC compiler; the CI build is the first compile.
